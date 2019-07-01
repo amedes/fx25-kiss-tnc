@@ -33,13 +33,12 @@
 #ifdef USE_WIFI
 #define EXAMPLE_ESP_WIFI_SSID      CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS      CONFIG_ESP_WIFI_PASSWORD
+#endif
 
 #ifdef CONFIG_KISS_TCPIP_PORT
 #define TNC_PORT CONFIG_KISS_TCPIP_PORT
 #else
 #define TNC_PORT 3105
-#endif
-
 #endif
 
 /* FreeRTOS event group to signal when we are connected*/
