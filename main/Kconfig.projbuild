@@ -1,0 +1,206 @@
+menu "FX.25 KISS TNC Configuration"
+
+choice KISS_FX25_DEFAULT_MODE
+    prompt "Default TNC Protocol"
+    default FX25_PARITY_16
+
+  config AX25_MODE
+    bool "AX.25 mode"
+  config FX25_PARITY_16
+    bool "FX.25 with Parity 16"
+  config FX25_PARITY_32
+    bool "FX.25 with Parity 32"
+  config FX25_PARITY_64
+    bool "FX.25 with Parity 64"
+endchoice
+
+config TNC_PROTOCOL
+    int
+    default  0 if AX25_MODE
+    default 16 if FX25_PARITY_16
+    default 32 if FX25_PARITY_32
+    default 64 if FX25_PARITY_64
+
+choice KISS_BAUD_RATE
+    prompt "Default baud rate"
+    default KISS_BAUD_115200
+
+  config KISS_BAUD_9600
+    bool "9600 baud"
+  config KISS_BAUD_115200
+    bool "115200 baud"
+  config KISS_BAUD_OTHER
+    bool "Other baud rate"
+endchoice
+
+config KISS_BAUD_OTHER_VAL
+    int "Other baud rate value" if KISS_BAUD_OTHER
+    default 115200
+
+config KISS_BAUD_RATE
+    int
+    default 9600 if KISS_BAUD_9600
+    default 115200 if KISS_BAUD_115200
+    default KISS_BAUD_OTHER_VAL if KISS_BAUD_OTHER
+
+config KISS_TXDELAY
+    int "TXDELAY default value"
+    range 0 255
+    default 50
+    help
+	Transmitter keyup delay in 10ms units.
+	The default start-up value is 50 (i.e., 500ms).
+
+config KISS_P
+    int "Persistence parameter default value"
+    range 0 255
+    default 63
+    help
+	The persistence parameter, p, scaled to the range 0 - 255 with
+	the following formula:
+	P = p * 256 - 1.
+	The default value is P = 63 (i.e., p = 0.25).
+
+config KISS_SLOTTIME
+    int "Slot time default value"
+    range 0 255
+    default 10
+    help
+	The slot interval in 10 ms units.
+	The default is 10 (i.e., 100ms).
+
+config KISS_FULLDUPLEX
+    bool "Full duplex"
+    default n
+    help
+	The default is half duplex.
+    
+config USE_WIFI
+    bool "Enable WiFi"
+    default n
+    help
+	Connect AP if this value is y.
+
+config ESP_WIFI_SSID
+    string "WiFi SSID"
+    depends on USE_WIFI
+    default "myssid"
+    help
+	SSID (network name) for the example to connect to.
+
+config ESP_WIFI_PASSWORD
+    string "WiFi Password"
+    depends on USE_WIFI
+    default "mypassword"
+    help
+	WiFi password (WPA or WPA2) for the example to use.
+
+config KISS_TCPIP_PORT
+    int "TCP port number for waiting connection"
+    depends on USE_WIFI
+    default 8000
+
+config TNC_BEACON
+    bool "Enable Beacon"
+    default n
+
+config TNC_BEACON_MYCALL
+    string "Beacon source address"
+    depends on TNC_BEACON
+    default "NOCALL"
+
+config TNC_BEACON_INTERVAL
+    int "Beacon interval in sec"
+    depends on TNC_BEACON
+    range 30 3600
+    default 600
+
+config TNC_BEACON_LEN
+    int "Beacon message length"
+    depends on TNC_BEACON
+    range 18 1024
+    default 128
+
+config ESP_GPIO_RXD
+    int "GPIO No. connected to RXD"
+    range 0 39
+    default 39
+
+config ESP_GPIO_CDT
+    int "GPIO No. connected to CDT"
+    range 0 39
+    default 36
+
+config ESP_GPIO_TXD
+    int "GPIO No. connected to TXD"
+    range 0 39
+    default 12
+
+config ESP_GPIO_PTT
+    int "GPIO No. connected to PTT"
+    range 0 39
+    default 15
+
+config ESP_GPIO_LED
+    int "GPIO No. connected to LED"
+    range 0 39
+    default 2
+
+config ESP_DAC
+    bool "Enable DAC for RXB and CDL"
+    default n
+
+config ESP_LEDC
+    bool "Enable 4.4336MHz clock for TCM3105"
+    default n
+
+config ESP_LEDC_PIN
+    int "4.4336MHz clock output pin for TCM3105"
+    range 0 31
+    depends on ESP_LEDC
+    default 16
+
+config ESP_CLK_TRS
+    bool "invert CLK input and output to TRS for TCM3105"
+    default n
+
+config ESP_CLK_PIN
+    int "GPIO No. connected to CLK of TCM3105"
+    range 0 39
+    depends on ESP_CLK_TRS
+    default 26
+
+config ESP_TRS_PIN
+    int "GPIO No. connected to TRS of TCM3105"
+    range 0 31
+    depends on ESP_CLK_TRS
+    default 14
+
+choice TNC_LOG_LEVEL
+    bool "TNC log level"
+    default TNC_LOG_LEVEL_NONE
+
+    config TNC_LOG_LEVEL_NONE
+      bool "No output"
+    config TNC_LOG_LEVEL_ERROR
+      bool "Error"
+    config TNC_LOG_LEVEL_WARN
+      bool "Warning"
+    config TNC_LOG_LEVEL_INFO
+      bool "Info"
+    config TNC_LOG_LEVEL_DEBUG
+      bool "Debug"
+    config TNC_LOG_LEVEL_VERBOSE
+      bool "Verbose"
+endchoice
+
+config TNC_LOG_LEVEL
+    int
+    default 0 if TNC_LOG_LEVEL_NONE
+    default 1 if TNC_LOG_LEVEL_ERROR
+    default 2 if TNC_LOG_LEVEL_WARN
+    default 3 if TNC_LOG_LEVEL_INFO
+    default 4 if TNC_LOG_LEVEL_DEBUG
+    default 5 if TNC_LOG_LEVEL_VERBOSE
+
+endmenu
