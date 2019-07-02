@@ -5,6 +5,8 @@
 #include <ctype.h>
 #include <sys/time.h>
 
+#include "esp_log.h"
+
 //#include <soc/rtc_cntl_reg.h>
 
 #include "modem.h"
@@ -27,6 +29,8 @@
 #define FX25_CORRELATION_CNT 8
 
 #define RS_CODE_SIZE 255
+
+#define TAG "fx25_decode"
 
 #if 0
 static const int BITS_COUNT_TABLE[256] = {
@@ -127,13 +131,13 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
     if (count <= FX25_CORRELATION_CNT) {
 
       if (count != 0) {
-        fprintf(stderr, "bit_count(%016llx) = %d\n", bits, count);
-        fprintf(stderr, "%016llx\n%016llx\n", *correlation_tag, tags[i].tag);
+        ESP_LOGI(TAG, "bit_count(%016llx) = %d", bits, count);
+        ESP_LOGI(TAG, "%016llx\n%016llx\n", *correlation_tag, tags[i].tag);
       }
 
       return i; // find i-th TAG
     }
-#if 1
+#if 0
     else if (count <= FX25_CORRELATION_CNT + 2) {
       fprintf(stderr, "fx25_decode: correlation tag match %d bits\n", 64 - count);
       fprintf(stderr, "bit_count(%016llx) = %d\n", bits, count);
@@ -175,7 +179,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
   if ((bits <= 0) || (bits >= BIT_LEN_MAX)) {
     state = STATE_SEARCH_TAG;
     fx25tag = ~0LLU; // set all 1
-    printf("FX25 decode: wrong bits: %d, bit_offset = %d\n", bits, bit_offset);
+    ESP_LOGI(TAG, "FX25 decode: wrong bits: %d, bit_offset = %d\n", bits, bit_offset);
 
     return 0;
   }
@@ -192,10 +196,10 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	  state = STATE_DATA;
 	  codeblock_bits = tags[tag_no].rs_code * 8; // RS CODEBLOCK bit length
 	  bzero(buf, BUF_SIZE);
-	  printf("fx25 tag: bit_offset = %d\n", bit_offset);
+	  ESP_LOGI(TAG, "fx25 tag: bit_offset = %d", bit_offset);
 	  bit_offset = 0;
 	  tag_t *tp = &tags[tag_no];
-	  printf("found fx25 tag: %02x, (%d, %d), %d\n", tag_no, tp->rs_code, tp->rs_info, codeblock_bits);
+	  ESP_LOGI(TAG, "found fx25 tag: %02x, (%d, %d), %d", tag_no, tp->rs_code, tp->rs_info, codeblock_bits);
 	}
 
 	break;
@@ -214,7 +218,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 
 	  // send fx.25 packet to next process
 	  //afio_write(ofp, buf, bit_offset / 8, 0);
-	  printf("get fx25 packet: bit length: %d\n", bit_offset);
+	  ESP_LOGI(TAG, "get fx25 packet: bit length: %d", bit_offset);
 #if 0
 	  for (int j = 0; j < bit_offset/8; j++) {
 	    printf("%02x ", buf[j]);
@@ -235,12 +239,12 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	  do {
 
 	    ax25_len = bitstuff_decode(ax25_buf, ax25_buf_size, &buf[1], bit_offset/8 - 1); // skip AX25 flag
-	    printf("ax25_len = %d\n", ax25_len);
+	    ESP_LOGI(TAG, "ax25_len = %d", ax25_len);
 	    if (ax25_len > 2) {
 	      int fcs = ax25_fcs(ax25_buf, ax25_len - 2);
 	      int fcs2 = ax25_buf[ax25_len - 2] | (ax25_buf[ax25_len - 1] << 8);
 
-	      fprintf(stderr, "FCS: %04x\n", fcs);
+	      ESP_LOGI(TAG, "FCS: %04x", fcs);
 #if 0
 	      for (int j = 0; j < ax25_len; j++) {
 	        printf("%02x ", ax25_buf[j]);
@@ -248,14 +252,15 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	      printf("\n");
 #endif
 	      if (fcs == fcs2) {
-	        printf("FCS is correct\n");
+	        ESP_LOGI(TAG, "FCS is correct");
 		fcs_ok = 1;
 		if (rs_decode_done) {
 		  rs_success++;
-		  printf("rs_decode success: %d / %d\n", rs_success, rs_decode_cnt);
+		  ESP_LOGI(TAG, "rs_decode success: %d / %d", rs_success, rs_decode_cnt);
 		}
 
-		printf("FX25 correct data: rs_decode = %d\n", rs_decode_cnt);
+		ESP_LOGI(TAG, "FX25 correct data: rs_decode = %d", rs_decode_cnt);
+#if 0
 		for (int j = 0; j < ax25_len - 2; j++) {
 		  int c = ax25_buf[j];
 
@@ -263,15 +268,15 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 		  printf("%c", isprint(c) ? c : '.');
 		}
 		printf("\n");
-
+#endif
 		break;
 
 	      } else {
-	        printf("FCS error\n");
+	        ESP_LOGI(TAG, "FCS error");
 	      }
 
 	    } else {
-	      printf("un-bit stuffing error\n");
+	      ESP_LOGI(TAG, "un-bit stuffing error");
 	    }
 
 	    if (!fcs_ok) {
@@ -343,14 +348,15 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	      if (rs_status) *rs_status = rs_err;
 	      rs_decode_done = 1;
 	      rs_decode_cnt++;
-	      fprintf(stderr, "rs_decode: %d\n", rs_err);
+	      ESP_LOGI(TAG, "rs_decode: %d", rs_err);
 
 	      if (rs_err < 0) {
-	        fprintf(stderr, "RS decode error: %d\n", rs_err);
+	        ESP_LOGI(TAG, "RS decode error: %d", rs_err);
 	        break;
 	      }
 
-	      printf("RS decode result: %d\n", rs_err);
+	      ESP_LOGI(TAG, "RS decode result: %d", rs_err);
+#if 0
 	      for (int i = 0; i < rs_info_size; i++) {
 	        int c = pre_rs_decode[i];
 	        int d = buf[i];
@@ -359,6 +365,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	        else printf("(%02x->%02x) ", c, d);
 	      }
 	      printf("\n");
+#endif
 	    }
 	  	
 	  } while (!fcs_ok);

@@ -93,6 +93,7 @@ static TaskHandle_t tx_task_handle;
 static QueueHandle_t ack_queue;
 #endif
 
+#if 0
 static void print_buf(uint8_t buf[], int len)
 {
     for (int i = 0; i < len; i++) {
@@ -100,6 +101,7 @@ static void print_buf(uint8_t buf[], int len)
     }
     printf("\n");
 }
+#endif
 
 static void print_diff(uint8_t buf0[], uint8_t buf1[], int len)
 {
@@ -186,10 +188,12 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 	    static uint8_t ax25_buf[AX25_BUF_SIZE];
 	    int bit_len = nrzi_decode(ax25_buf, AX25_BUF_SIZE, ax25_nrzi_buf, nrzi_len);
 
+#if 0
 	    if (bit_len < 0) {
 		printf("ax25_rx: ax25_nrzi_buf, nrzi_len = %d\n", nrzi_len);
 		print_buf(ax25_nrzi_buf, (nrzi_len + 7) / 8);
 	    }
+#endif
 
 	    if ((bit_len >= AX25_MIN_LEN * 8) && (bit_len % 8 == 0)) {
 		int ax25_len = bit_len / 8;
@@ -220,8 +224,8 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		if (ax25_len > 0) { // EC success
 
 		    // output packet to serial
-		    printf("ax25_rx: AX25 BEC success, ax25_nrzi_buf[], nrzi_len = %d\n", nrzi_len);
-		    print_diff(err_buf, ax25_nrzi_buf, (nrzi_len + 7) / 8);
+		    ESP_LOGI(TAG, "ax25_rx: AX25 BEC success, ax25_nrzi_buf[], nrzi_len = %d", nrzi_len);
+		    //print_diff(err_buf, ax25_nrzi_buf, (nrzi_len + 7) / 8);
 		    packet_output(ax25_buf, ax25_len - 2);
 		    pkt_ack++;
 		    ax25_nrzi_bits++;
@@ -229,7 +233,7 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 
 		    if (memcmp(test_packet, ax25_buf, test_packet_len) != 0) { // error correction miss
 			    ax25_nrzi_ec_miss++;
-			    print_diff(test_packet, ax25_buf, test_packet_len);
+			    //print_diff(test_packet, ax25_buf, test_packet_len);
 		    }
 
 		}
@@ -325,9 +329,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 		if (rs_result >= 0) {
 
 		    ESP_LOGD(TAG, "fx25_rx: RS error correction: %d symbols", rs_result);
-#if CONFIG_TNC_LOG_LEVEL >= ESP_LOG_DEBUG
-		    print_diff(err_buf, fx25_buf, rs_code_size);
-#endif
+		    //print_diff(err_buf, fx25_buf, rs_code_size);
 		    
 		    ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1);
 
@@ -391,7 +393,7 @@ void rx_task(void *p)
 	if (((rxd0 ^ rxd) & 1) == 0) {
 		// may be lost interrupt
 		uint32_t tmp = (rxd - rxd0) >> 3;
-		ESP_LOGI("WiFi", "wrong RXD edge polarity: time diff %u.%u us", tmp / 10, tmp % 10);
+		ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", tmp / 10, tmp % 10);
 	}
 
 
@@ -434,7 +436,7 @@ void rx_task(void *p)
 	  int bits = nrzi_decode(ax25_buf2, AX25_BUF_SIZE, ax25_nrzi_buf, len);
 	  printf("nrzi_decode(): bit len = %d\n", bits);
 
-#if 1
+#if 0
 	  printf("ax25_nrzi_buf: len = %d\n", len);
 #if 1
 	  for (int i = 0; i < len / 8; i++) {
@@ -472,10 +474,11 @@ void rx_task(void *p)
 	    int byte = bits / 8;
 	    uint16_t fcs = ax25_fcs(ax25_buf2, byte - 2);
 	    uint16_t fcs2 = ax25_buf2[byte - 2] | (ax25_buf2[byte - 1] << 8);
-
+#if 0
 	    printf("ax25_nrzi: bits = %d, byte = %d\n", bits, byte);
 	    printf("ax25_nrzi: fcs = %04x, fcs2 = %04x\n", fcs, fcs2);
 	    printf("ax25_buf2: byte = %d\n", byte);
+#endif
 #if 0
 	    for (int i = 0; i < byte; i++) {
 	      printf("%02x ", ax25_buf2[i]);
@@ -488,7 +491,7 @@ void rx_task(void *p)
 	      ax25_nrzi_pkts++;
 #ifdef CHECK_MISS
 	      if ((byte != test_packet_len) || memcmp(ax25_buf2, test_packet, test_packet_len)) ax25_nrzi_ec_miss++;
-	      printf("ax25_nrzi: byte = %d, len = %d\n", byte, test_packet_len);
+	      ESP_LOGI(TAG, "ax25_nrzi: byte = %d, len = %d", byte, test_packet_len);
 #if 0
 	      for (int i = 0; i < test_packet_len; i++) {
 		printf("%02x:%02x ", ax25_buf2[i], test_packet[i]);
@@ -534,12 +537,13 @@ void rx_task(void *p)
 		  fcs_ok = 1;
 	          ax25_nrzi_pkts++;
 		  ax25_nrzi_ec_ok++;
-		 
+#if 0 
 		  printf("ax25_nrzi: error correction: err_bit = %d, len = %d, cnt = %d, time: %ld.%06ld\n",
 				  off, byte, ++nrzi_cnt, tv1.tv_sec, tv1.tv_usec);
 
 		  printf("correct NRZI data, error pos: %d:%d, error data: %02x, correct data: %02x\n",
 				  off / 8, off % 8, ax25_nrzi_buf[off/8] ^ (1 << (off%8)), ax25_nrzi_buf[off/8]);
+#endif
 #if 0
 		  int i;
 		  for (i = 0; i < (len + 7) / 8; i++)
@@ -639,19 +643,22 @@ void rx_task(void *p)
 	    int nrzi_len = ax25_nrzi_bit(lv, ax25_nrzi_buf2, AX25_NRZI_SIZE);
 
 	    if (nrzi_len > 18 * 8) {
+#if 0
 	      printf("ax25_nrzi_bit(): nrzi_len = %d\n", nrzi_len);
 	      for (int i = 0; i < (nrzi_len + 7) / 8; i++) {
 		  printf("%02x ", ax25_nrzi_buf2[i]);
 	      }
 	      printf("\n");
-
+#endif
 	      int bits = nrzi_decode(ax25_buf2, AX25_BUF_SIZE, ax25_nrzi_buf2, nrzi_len);
+#if 0
 	      printf("nrzi_decode(): bits = %d\n", bits);
+#endif
 	      if ((bits > 2) && (bits % 8 == 0)) {
 	        int len = bits / 8;
 		int fcs = ax25_fcs(ax25_buf2, len - 2);
 		int fcs2 = ax25_buf2[len - 2] | (ax25_buf2[len - 1] << 8);
-
+#if 0
 	        printf("nrzi_decode(): fcs = %04x, fcs2 = %04x\n", fcs, fcs2);
 		if (fcs == fcs2) ax25_nrzi_bits++;
 
@@ -659,6 +666,7 @@ void rx_task(void *p)
 	          printf("%02x ", ax25_buf2[i]);
 	        }
 		printf("\n");
+#endif
 	      }
 	    }
 
@@ -666,36 +674,39 @@ void rx_task(void *p)
 	    int tag_no = fx25_decode_bit(lv, fx25_buf2, FX25_BUF_SIZE);
 
 	    // if (tag_no) printf("fx25_decode_bit(): tag_no = %d\n", tag_no);
-
+#if 0
 	    if (tag_no) printf("fx25_decode_bit(): tag_no = %02x\n", tag_no);
-
+#endif
 	    if (tag_no > 0) {
 	      int rs_code_size = tags[tag_no].rs_code;
 	      static uint8_t ax25_buf[AX25_BUF_SIZE];
 	      int ax25_len;
-
+#if 0
 	      printf("fx25_decode_bit(): tag_no = %02x, code_size = %d\n", tag_no, rs_code_size);
 	      for (int i = 0; i < rs_code_size; i++) {
 		  printf("%02x ", fx25_buf2[i]);
 	      }
 	      printf("\n");
-
+#endif
 	      ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf2[1], rs_code_size - 1);
-
+#if 0
 	      printf("bitstuff_decode(): ax25_len = %d\n", ax25_len);
+#endif
 
 	      if (ax25_len > 0) {
+#if 0
 	        for (int i = 0; i < ax25_len; i++) {
 		    printf("%02x ", ax25_buf[i]);
 	        }
 		printf("\n");
-
+#endif
 	        int fcs = ax25_fcs(ax25_buf, ax25_len - 2);
 		int fcs2 = ax25_buf[ax25_len - 2] | (ax25_buf[ax25_len - 1] << 8);
 
 	        if (fcs == fcs2) fx25_bits++;
-
+#if 0
 	        printf("bitstuff_decode(): fcs = %04x, fcs2 = %04x\n", fcs, fcs2);
+#endif
 	      }
 	    }
 
