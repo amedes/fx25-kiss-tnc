@@ -1,0 +1,27 @@
+set(COMPONENT_SRCS
+"main.c"
+"ax25.c"
+"ax25_decode.c"
+"bit_stuffing.c"
+"bitstuff_decode.c"
+"dac.c"
+"fx25_decode.c"
+"fx25_encode.c"
+"fx25tag.c"
+"gf.c"
+"gf2p8.c"
+"gf11.c"
+"gpio.c"
+"ledc.c"
+"mcpwm.c"
+"packet_table.c"
+"poly.c"
+"rmt.c"
+"rs.c"
+"tx_cntl.c"
+"uart.c"
+"wifi.c"
+)
+set(COMPONENT_ADD_INCLUDEDIRS ".")
+
+register_component()
