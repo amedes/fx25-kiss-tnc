@@ -17,7 +17,7 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 
-#include "rmt.c"
+#include "rmt.h"
 #include "fx25_encode.h"
 #include "tx_cntl.h"
 
