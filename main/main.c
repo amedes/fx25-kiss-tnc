@@ -849,10 +849,10 @@ void tx_task(void *p)
     int len;
     int i, j;
     static uint8_t ax25_data[PKT_LEN];
-    static uint8_t dst_addr[6] = "BEACON";
-    static uint8_t src_addr[6] = "      ";
+    static uint8_t dst_addr[7] = "BEACON";
+    static uint8_t src_addr[7] = "      ";
     uint8_t c;
-    const uint8_t r[] = CONFIG_TNC_BEACON_MYCALL;
+    const uint8_t r[6] = CONFIG_TNC_BEACON_MYCALL;
     uint8_t *s;
     struct timeval tv;
     int seq = 1;
@@ -862,7 +862,7 @@ void tx_task(void *p)
     for (i = 0; i < 6; i++) {
 	c = toupper(r[i]);
 	if (!isalnum(c)) c = ' ';
-	src_addr[i++] = c;
+	src_addr[i] = c;
     }
 
     while (1) {
