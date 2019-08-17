@@ -87,10 +87,16 @@ static int test_packet_len;
 static uint8_t *test_fx25_buf;
 static int test_fx25_len;
 
+#ifdef CONFIG_TNC_BEACON
 static TaskHandle_t tx_task_handle;
+#endif
 
 #ifdef USE_ACK
 static QueueHandle_t ack_queue;
+#endif
+
+#ifdef CONFIG_TNC_DEMO_MODE
+extern unsigned char err_val[255];
 #endif
 
 #if 0
@@ -116,6 +122,43 @@ static void print_diff(uint8_t buf0[], uint8_t buf1[], int len)
     }
     printf("\n");
 }
+
+#ifdef CONFIG_TNC_DEMO_MODE
+
+static int ax25_decode_pkts = 0;
+static int fx25_decode_pkts = 0;
+
+static void packet_print(uint8_t buf[], int len)
+{
+    uint8_t in_addr = 1;
+
+    for (int i = 0; i < len; i++) {
+	uint8_t c = buf[i];
+	uint8_t d = c >> 1;
+
+	if (in_addr) { // address field
+	    if (c & 1) in_addr = 0; // end of addr
+	    if (i % 7 == 6) { // SSID
+	        uint8_t ssid = d & 0x0f;
+
+		if (ssid > 0) printf("-%d", ssid);
+		printf("%c", (in_addr) ? ',' : ':');
+	    } else if (((d >= 'A') && (d <= 'Z')) || ((d >= '0') && (d <= '9'))) { // 
+		printf("%c", d);
+	    } else if (d != ' ') {
+		    printf("<%02x>", c);
+	    }
+	} else {
+	    if ((c >= ' ') && (c <= '~')) { // printable char.
+	       	printf("%c", c);
+	    } else {
+		printf("<%02x>", c);
+	    }
+	}
+    }
+    printf("\n");
+}
+#endif
 
 /*
  * AX.25 receive processing
@@ -200,18 +243,23 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 
 		if (ax25_fcs_check(ax25_buf, ax25_len)) {
 		    // success decoding AX.25 packet
-
+#ifdef CONFIG_TNC_DEMO_MODE
+		    printf("ax25:%d:", ax25_len);
+		    packet_print(ax25_buf, ax25_len - 2);
+		    ax25_decode_pkts++;
+#else
 		    // stop decodding FX.25 packet
 		    fx25_decode_bit(-1, NULL, 0);
 
 		    // output packet to serial
 		    packet_output(ax25_buf, ax25_len - 2);
+#endif
 		    pkt_ack++;
 		    ax25_nrzi_bits++;
 		    decode_ok++;
 		}
 	    }
-
+#if 0
 	    if (!decode_ok && (nrzi_len < 512)) {
 
 		static uint8_t err_buf[AX25_NRZI_SIZE];
@@ -238,6 +286,7 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 
 		}
 	    }
+#endif
 	}
     }
     if (level) bit_sum += t;
@@ -301,23 +350,35 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 	    t = ((t + BIT_TIME2) / BIT_TIME) * BIT_TIME;
 	}
 
-	if (tag_no > 0) {
+	if (tag_no > 0) { // correlation tag is detected
 	    static uint8_t ax25_buf[AX25_BUF_SIZE];
 	    int rs_code_size = tags[tag_no].rs_code;
 	    int ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1); // buf[0] is AX.25 flag (7E)
 
+#if 0
 	    if (ax25_len <= 2) {
 		printf("fx25_rx(): ax25_len = %d\n", ax25_len);
 		//print_buf(fx25_buf, rs_code_size);
 	    }
+#endif
 
 	    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
+#ifdef CONFIG_TNC_DEMO_MODE
+		printf("fx25:%d:", ax25_len);
+		packet_print(ax25_buf, ax25_len - 2);
+		fx25_decode_pkts++;
+	        printf("\tfx25 info: Tag_0%X, RS(%d, %d)\n", tag_no, rs_code_size, tags[tag_no].rs_info);
+		if (fx25_decode_pkts % 10 == 0) printf("\tReceived packets: fx25: %d pkts, ax25: %d pkts, ax25/fx25 = %d %%\n",
+				fx25_decode_pkts, ax25_decode_pkts, ax25_decode_pkts * 100 / fx25_decode_pkts);
+		//printf("fx25 info: No errors\n");
+#else
 		packet_output(ax25_buf, ax25_len - 2);
+#endif
 		pkt_ack++;
 		fx25_bits++;
 	    } else {
 
-		print_diff(test_fx25_buf, fx25_buf, test_fx25_len);
+		//print_diff(test_fx25_buf, fx25_buf, test_fx25_len);
 
 		fx25_rs_try++;
 
@@ -334,7 +395,26 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 		    ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1);
 
 		    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
+#ifdef CONFIG_TNC_DEMO_MODE
+			printf("fx25:%d:", ax25_len);
+			packet_print(ax25_buf, ax25_len - 2);
+			fx25_decode_pkts++;
+			printf("\tfx25 info: Tag_0%X, RS(%d, %d)\n", tag_no, rs_code_size, tags[tag_no].rs_info);
+			printf("\tfx25 info: %d error(s) corrected\n", rs_result);
+
+			uint8_t errs = 0;
+			for (int i = 0; i < rs_code_size; i++) {
+			    uint8_t e = err_val[(rs_code_size - 1) - i];
+			    
+			    if (e > 0) {
+			        printf("\tfx25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
+			    }
+			}
+			if (fx25_decode_pkts % 10 == 0) printf("\tReceived packets: fx25: %d pkts, ax25: %d pkts, ax25/fx25 = %d %%\n",
+				fx25_decode_pkts, ax25_decode_pkts, ax25_decode_pkts * 100 / fx25_decode_pkts);
+#else
 			packet_output(ax25_buf, ax25_len - 2);
+#endif
 			fx25_bits++;
 			fx25_rs_ok++;
 			pkt_ack++;
@@ -377,11 +457,10 @@ void rx_task(void *p)
     //int bit_sum = 0;
     //int bit_tm = 0;
     int pkt_ack = 0;
-    
 
     while (1) {
 	rxd0 = rxd;
-	rc = xQueueReceive(capqueue, &rxd, 1000);
+	rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
 	if (rc != pdTRUE) continue;
 
 	if (cap_queue_err) {
@@ -512,6 +591,7 @@ void rx_task(void *p)
 	    }
 	  }
 
+#if 0
 	  if (!fcs_ok && (len < 512)) { // avoid large packet
 	    struct timeval tv0, tv1;
 	    gettimeofday(&tv0, NULL);
@@ -582,6 +662,7 @@ void rx_task(void *p)
 	    }
 
 	  }
+#endif
 	}
 
 	//len = ax25_decode(bits, ax25_buf, AX25_BUF_SIZE);
@@ -598,6 +679,7 @@ void rx_task(void *p)
 	  bit_tm = 0;
 	  bit_sum = 0;
 
+	  // reset decoder
 	  ax25_decode_bit(-1, NULL, 0);
 	  ax25_nrzi_bit(-1, NULL, 0);
 	  fx25_decode_bit(-1, NULL, 0);
@@ -843,6 +925,8 @@ void rx_task(void *p)
 #define UI_CONTROL 0x03
 #define UI_PID 0xf0
 
+#ifndef CONFIG_TNC_DEMO_MODE
+
 // sending a packet periodically for test purpose
 void tx_task(void *p)
 {
@@ -905,7 +989,27 @@ void tx_task(void *p)
 	fx25_send_packet(ax25_data, len, 0, tnc_mode); // 0:do not wait for Queuing, default TNC mode
     }
 }
-#endif
+
+#else // CONFIG_TNC_DEMO_MODE
+
+// sending packet for demo purpose
+void tx_task(void *p)
+{
+    int idx, len;
+    int tnc_mode = get_tnc_mode();
+
+    while (1) {
+	idx = 0;
+	while ((len = packet_table[idx++]) > 0) {
+	    vTaskDelay(10 * 1000 / portTICK_PERIOD_MS);
+	    fx25_send_packet((uint8_t *const)&packet_table[idx], len - 2, 0, tnc_mode); // -2: delete FCS
+	    idx += len;
+	}
+    }
+}
+#endif // CONFIG_TNC_DEMO_MODE
+
+#endif // CONFIG_TNC_BEACON
 
 void app_main()
 {
@@ -959,5 +1063,9 @@ void app_main()
     if (rc != pdPASS) {
 	return;
     }
+#endif
+
+#ifdef CONFIG_TNC_DEMO_MODE
+    printf("***Warning: FX.25 KISS TNC enter demonstration mode***\n");
 #endif
 }

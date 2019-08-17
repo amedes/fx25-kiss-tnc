@@ -428,11 +428,13 @@ int fx25_decode_bit(int level, uint8_t fx25_buf[], int fx25_buf_size)
 
 	//printf("fx25_decode_bit(): fx25tag = %016llx, bit = %d\n", fx25tag, bit);
 
-#define FX25_FLAGS 0x7e7e
+//#define FX25_FLAGS 0x7e7e
+#define FX25_FLAGS 0x7e
 	
 	// flag detection for bit sync
 	fx25flag >>= 1;
-	if (bit) fx25flag |= 0x8000;
+	//if (bit) fx25flag |= 0x8000;
+	if (bit) fx25flag |= 0x80;
 	if (fx25flag == FX25_FLAGS) {
 	    flag_found = 1;
 	    fx25flag = 0;
@@ -508,9 +510,9 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 	//if (offset > 0) bzero(rs_buf, offset);	// for shortend code, zero clear
 	bzero(rs_buf, RS_CODE_SIZE);	// for shortend code, zero clear
 
-	rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
+	//rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
 
-	for (i = 1; i < rs_code_size; i++) {	// copy data to RS buffer
+	for (i = 0; i < rs_code_size; i++) {	// copy data to RS buffer
 	    rs_buf[offset + i] = fx25_buf[i];
 	}
 
@@ -540,7 +542,7 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 	rs_info_size = RS_INFO_SIZE;
 	rs_parity = rs_code_size - rs_info_size;
 	
-	fx25_buf[0] = AX25_FLAG;			// first byte is always AX.25 flag (7E)
+	//fx25_buf[0] = AX25_FLAG;			// first byte is always AX.25 flag (7E)
 
 	rs_status = 0;					// sum of corrected symbols
 	for (j = 0; j < factor; j++) {

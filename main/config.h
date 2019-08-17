@@ -4,6 +4,8 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__ 1
 
+#include "sdkconfig.h"
+
 // KISS default parameter
 #define TXDELAY CONFIG_KISS_TXDELAY
 #define P	CONFIG_KISS_P

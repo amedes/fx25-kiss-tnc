@@ -203,4 +203,20 @@ config TNC_LOG_LEVEL
     default 4 if TNC_LOG_LEVEL_DEBUG
     default 5 if TNC_LOG_LEVEL_VERBOSE
 
+config TNC_DEMO_MODE
+    bool "TNC demo mode"
+    default n
+    help
+	output decoded packet and transmit demo packet with random error.
+
+config TNC_BIT_ERR_RATE
+    string "bit error rate"
+    default "1e-3"
+    depends on TNC_DEMO_MODE
+
+config TNC_BURST_ERR_RATE
+    string "burst error rate"
+    default "0.8"
+    depends on TNC_DEMO_MODE
+
 endmenu

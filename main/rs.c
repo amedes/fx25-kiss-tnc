@@ -7,6 +7,8 @@
 #include "rs.h"
 #include "poly.h"
 
+#include "config.h"
+
 static int rs_init_flag = 0;
 //static int rs_code_len;
 //static int rs_mesg_len;
@@ -20,6 +22,10 @@ static poly_t rs_gen_p64; // generating polynomial for 64 parity
 #define RS_ERR (-1)
 #define RS_OK 0
 #define GF_ELEMENTS 255
+
+#ifdef CONFIG_TNC_DEMO_MODE
+unsigned char err_val[GF_ELEMENTS];
+#endif
 
 /*
   calculate generating polynamial
@@ -335,6 +341,10 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
   for (i = 0; (i < rs_code_len) && (errs < rs_t); i++) {
     gf_t an = gf_pow(i);
 
+#ifdef CONFIG_TNC_DEMO_MODE
+      err_val[i] = 0; // clear error
+#endif
+
     if (poly_subst(&sigma, an) == 0) { // sigma(an) == 0, "i" is error position
       gf_t c, e, n;
 
@@ -345,7 +355,10 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
 
       //if (e == 0) continue; // no need to correct
 
-      
+#ifdef CONFIG_TNC_DEMO_MODE
+      err_val[i] = e; // save error value
+#endif
+
       errs++;
       /* correct message */
       c = code[(rs_code_len - 1) - i];

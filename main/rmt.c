@@ -5,6 +5,8 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <sys/time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -32,6 +34,38 @@
 #define RMT_DURATION ((80*1000*1000 / RMT_CLK_DIV + BAUD/2) / BAUD) // 1200bps
 
 #define RMT_TAG "RMT"
+
+#ifdef CONFIG_TNC_DEMO_MODE
+#define AN_BIT 0
+#define AN_BURST 1
+
+static int an_bit = RAND_MAX / 1000; // 1e-3
+static int an_burst = RAND_MAX / 2; // 0.5
+static int an_state = AN_BIT; // bit error state
+static unsigned int an_seed = 1;
+
+/*
+ * add bit error for demo
+ */
+static int noise(void)
+{
+    switch (an_state) {
+	case AN_BIT:
+	    if (rand_r(&an_seed) < an_bit) {
+		an_state = AN_BURST;
+		return 1;
+	    }
+	    break;
+	case AN_BURST:
+	    if (rand_r(&an_seed) < an_burst) {
+		return (rand_r(&an_seed) < RAND_MAX/2);
+	    }
+	    an_state = AN_BIT;
+    }
+
+    return 0;
+}
+#endif
 
 /*
  * copy packet data to rmt hardware with NRZI conversion
@@ -82,12 +116,19 @@ static void IRAM_ATTR copy_to_rmt(const void *src, rmt_item32_t *dest, size_t sr
 	    // process 2 bits at once
 	    pdest->duration0 = bit_time[cnt++]; cnt %= BIT_CYCLE;
 	    if ((m & 1) == 0) level = !level; // NRZI
+#ifdef CONFIG_TNC_DEMO_MODE
+	    pdest->level0 = level ^ noise();
+#else
 	    pdest->level0 = level;
+#endif
 
 	    pdest->duration1 = bit_time[cnt++]; cnt %= BIT_CYCLE;
 	    if ((m & 2) == 0) level = !level; // NRZI
+#ifdef CONFIG_TNC_DEMO_MODE
+	    pdest->level1 = level ^ noise();
+#else
 	    pdest->level1 = level;
-
+#endif
 	    pdest++;
 	    num++;
 	}
@@ -283,5 +324,20 @@ void rmt_tx_init(void)
 	ESP_LOGD(RMT_TAG, "xRingbufferCreate() fail");
 	abort();
     }
+
+#ifdef CONFIG_TNC_DEMO_MODE
+    float x;
+    struct timeval tv;
+
+    x = atof(CONFIG_TNC_BIT_ERR_RATE);
+    if (x > 0.0 && x < 1.0) an_bit = RAND_MAX * x;
+    x = atof(CONFIG_TNC_BURST_ERR_RATE);
+    if (x > 0.0 && x < 1.0) an_burst = RAND_MAX * x;
+    printf("Bit error rate: %.2g, Burst error rate: %.2g\n", (float)an_bit / RAND_MAX, (float)an_burst / RAND_MAX);
+
+    gettimeofday(&tv, NULL);
+    an_seed = tv.tv_usec;
+#endif
+
     xTaskCreate(rmt_send_task, "rmt_send_task", 2048, rmt_ringbuf, 12, NULL);
 }
