@@ -335,15 +335,16 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
   poly_print(&dsigma);
   */
 
+#ifdef CONFIG_TNC_DEMO_MODE
+  // clear error value
+  for (i = 0; i < rs_code_len; i++) err_val[i] = 0;
+#endif
+
   /* find error position */
   int errs = 0;
   /*printf("find error position\n");*/
   for (i = 0; (i < rs_code_len) && (errs < rs_t); i++) {
     gf_t an = gf_pow(i);
-
-#ifdef CONFIG_TNC_DEMO_MODE
-      err_val[i] = 0; // clear error
-#endif
 
     if (poly_subst(&sigma, an) == 0) { // sigma(an) == 0, "i" is error position
       gf_t c, e, n;
