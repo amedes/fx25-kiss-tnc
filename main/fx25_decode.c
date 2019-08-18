@@ -510,7 +510,7 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 	//if (offset > 0) bzero(rs_buf, offset);	// for shortend code, zero clear
 	bzero(rs_buf, RS_CODE_SIZE);	// for shortend code, zero clear
 
-	//rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
+	rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
 
 	for (i = 0; i < rs_code_size; i++) {	// copy data to RS buffer
 	    rs_buf[offset + i] = fx25_buf[i];
@@ -542,7 +542,7 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 	rs_info_size = RS_INFO_SIZE;
 	rs_parity = rs_code_size - rs_info_size;
 	
-	//fx25_buf[0] = AX25_FLAG;			// first byte is always AX.25 flag (7E)
+	fx25_buf[0] = AX25_FLAG;			// first byte is always AX.25 flag (7E)
 
 	rs_status = 0;					// sum of corrected symbols
 	for (j = 0; j < factor; j++) {
