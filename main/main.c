@@ -404,7 +404,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 			uint8_t errs = 0;
 			for (int i = 0; i < rs_code_size; i++) {
-			    uint8_t e = err_val[(rs_code_size - 1) - i];
+			    uint8_t e = err_val[i];
 			    
 			    if (e > 0) {
 			        printf("\tfx25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
