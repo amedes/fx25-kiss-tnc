@@ -47,12 +47,14 @@
 static int tnc_mode = CONFIG_TNC_PROTOCOL;
 
 // KISS timing parameter resolution
-#define TIME_UNIT	10	// 10 mili sec
+#define TIME_UNIT	10	// 10 milli sec
 
 // check CDT interval if CDT is ON
 #define WAIT_CDT_TIME (10 / portTICK_PERIOD_MS)
 
 #define TAG "TX_CNTL"
+
+static unsigned int tx_seed = 1;
 
 static uint8_t fullduplex = !FULLDUPLEX;
 static int txdelay = (TXDELAY * TIME_UNIT) / portTICK_PERIOD_MS;
@@ -74,7 +76,7 @@ void wait_txdelay(void)
 
 int p_persistent(void)
 {
-    return fullduplex || (rand() <= parameter_p);
+    return fullduplex || (rand_r(&tx_seed) <= parameter_p);
 }
 
 void wait_slottime(void)
