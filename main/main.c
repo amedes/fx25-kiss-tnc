@@ -997,11 +997,12 @@ void tx_task(void *p)
 {
     int idx, len;
     int tnc_mode = get_tnc_mode();
+    static unsigned int seed = 1;
 
     while (1) {
 	idx = 0;
 	while ((len = packet_table[idx++]) > 0) {
-	    vTaskDelay(10 * 1000 / portTICK_PERIOD_MS);
+	    vTaskDelay((10 * 1000 + rand_r(&seed) % 5000) / portTICK_PERIOD_MS);
 	    fx25_send_packet((uint8_t *const)&packet_table[idx], len - 2, 0, tnc_mode); // -2: delete FCS
 	    idx += len;
 	}
