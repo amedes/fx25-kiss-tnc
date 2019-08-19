@@ -23,10 +23,6 @@ static poly_t rs_gen_p64; // generating polynomial for 64 parity
 #define RS_OK 0
 #define GF_ELEMENTS 255
 
-#ifdef CONFIG_TNC_DEMO_MODE
-unsigned char err_val[GF_ELEMENTS];
-#endif
-
 /*
   calculate generating polynamial
 
@@ -335,11 +331,6 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
   poly_print(&dsigma);
   */
 
-#ifdef CONFIG_TNC_DEMO_MODE
-  // clear error value
-  for (i = 0; i < rs_code_len; i++) err_val[i] = 0;
-#endif
-
   /* find error position */
   int errs = 0;
   /*printf("find error position\n");*/
@@ -355,10 +346,6 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
       e = gf_div(poly_subst(&omega, an), poly_subst(&dsigma, an));
 
       //if (e == 0) continue; // no need to correct
-
-#ifdef CONFIG_TNC_DEMO_MODE
-      err_val[i] = e; // save error value
-#endif
 
       errs++;
       /* correct message */

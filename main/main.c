@@ -95,10 +95,6 @@ static TaskHandle_t tx_task_handle;
 static QueueHandle_t ack_queue;
 #endif
 
-#ifdef CONFIG_TNC_DEMO_MODE
-extern unsigned char err_val[255];
-#endif
-
 #if 0
 static void print_buf(uint8_t buf[], int len)
 {
@@ -404,7 +400,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 			uint8_t errs = 0;
 			for (int i = 0; i < rs_code_size; i++) {
-			    uint8_t e = err_val[(rs_code_size - 1) - i];
+			    uint8_t e = err_buf[i] ^ fx25_buf[i];
 			    
 			    if (e > 0) {
 			        printf("\tfx25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
