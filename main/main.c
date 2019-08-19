@@ -398,8 +398,9 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 			printf("\tfx25 info: Tag_0%X, RS(%d, %d)\n", tag_no, rs_code_size, tags[tag_no].rs_info);
 			printf("\tfx25 info: %d error(s) corrected\n", rs_result);
 
+			// print error value
 			uint8_t errs = 0;
-			for (int i = 0; i < rs_code_size; i++) {
+			for (int i = 1; i < rs_code_size; i++) { // skip fx25_buf[0], because it is always no error
 			    uint8_t e = err_buf[i] ^ fx25_buf[i];
 			    
 			    if (e > 0) {

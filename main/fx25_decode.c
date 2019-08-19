@@ -512,7 +512,7 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 
 	rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
 
-	for (i = 0; i < rs_code_size; i++) {	// copy data to RS buffer
+	for (i = 1; i < rs_code_size; i++) {	// copy data to RS buffer
 	    rs_buf[offset + i] = fx25_buf[i];
 	}
 
