@@ -136,6 +136,15 @@ int bitstuff_decode(uint8_t byte_buf[], int buf_len, uint8_t ax25_buf[], int bit
   bzero(byte_buf, buf_len);
 
   bit_offset = 0;
+
+#define AX25_FLAG 0x7e
+
+  // skip AX.25 start flag
+  while (bit_offset < bit_offset_len) {
+    if (ax25_buf[bit_offset / 8] != AX25_FLAG) break;
+    bit_offset += 8;
+  }
+
   while (bit_offset < bit_offset_len) {
     bit = (ax25_buf[bit_offset / 8] >> (bit_offset % 8)) & 1;
     bit_offset++;
