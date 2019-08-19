@@ -15,9 +15,9 @@
 #include "gpio.h"
 
 #ifdef CONFIG_KISS_FULLDUPLEX
-#define FULLDUPLEX	CONFIG_KISS_FULLDUPLEX
-#else
 #define FULLDUPLEX	1
+#else
+#define FULLDUPLEX	0
 #endif
 
 #ifdef CONFIG_KISS_TXDELAY
@@ -56,10 +56,10 @@ static int tnc_mode = CONFIG_TNC_PROTOCOL;
 
 static unsigned int tx_seed = 1;
 
-static uint8_t fullduplex = !FULLDUPLEX;
+static uint8_t fullduplex = FULLDUPLEX;
 static int txdelay = (TXDELAY * TIME_UNIT) / portTICK_PERIOD_MS;
 static int parameter_p = (DEFAULT_P + 1) * (RAND_MAX / 256 + 1) - 1;
-static int slottime = (SLOTTIME * TIME_UNIT) / portTICK_PERIOD_MS;
+static int slottime = (SLOTTIME * TIME_UNIT + portTICK_PERIOD_MS/2) / portTICK_PERIOD_MS;
 
 void wait_carrier_inactive(void)
 {
@@ -114,7 +114,7 @@ void set_slottime(int ch, int delay)
 {
     if (ch != 0) return;
 
-    slottime = (delay * TIME_UNIT) / portTICK_PERIOD_MS;
+    slottime = (delay * TIME_UNIT + portTICK_PERIOD_MS/2) / portTICK_PERIOD_MS;
     ESP_LOGI(TAG, "slottime: %d", slottime);
 }
 
