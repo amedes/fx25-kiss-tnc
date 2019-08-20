@@ -185,8 +185,10 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 	}
     }
 
-    if (fx25_decode_pkts % 10 == 0) printf("\tTotal: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25/total: %d %%, AX25/total: %d %%\n",
-		    total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts);
+    if (fx25_decode_pkts % 10 == 0) {
+	printf("\tTotal: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d %%, AX25%%: %d %%\n",
+		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts);
+    }
 }
 #endif
 
