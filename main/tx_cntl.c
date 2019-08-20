@@ -58,7 +58,7 @@ static unsigned int tx_seed = 1;
 
 static uint8_t fullduplex = FULLDUPLEX;
 static int txdelay = (TXDELAY * TIME_UNIT) / portTICK_PERIOD_MS;
-static int parameter_p = (DEFAULT_P + 1) * (RAND_MAX / 256 + 1) - 1;
+static int parameter_p = DEFAULT_P;
 static int slottime = (SLOTTIME * TIME_UNIT + portTICK_PERIOD_MS/2) / portTICK_PERIOD_MS;
 
 void wait_carrier_inactive(void)
@@ -76,7 +76,7 @@ void wait_txdelay(void)
 
 int p_persistent(void)
 {
-    return fullduplex || (rand_r(&tx_seed) <= parameter_p);
+    return fullduplex || ((rand_r(&tx_seed) & 0xff) <= parameter_p);
 }
 
 void wait_slottime(void)
@@ -106,7 +106,7 @@ void set_parameter_p(int ch, int p)
 {
     if (ch != 0) return;
 
-    parameter_p = (p + 1) * (RAND_MAX / 256 + 1) - 1;
+    parameter_p = p;
     ESP_LOGI(TAG, "P: %d, parameter_p: %d", p, parameter_p);
 }
 

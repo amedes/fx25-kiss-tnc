@@ -123,6 +123,8 @@ static void print_diff(uint8_t buf0[], uint8_t buf1[], int len)
 
 static int ax25_decode_pkts = 0;
 static int fx25_decode_pkts = 0;
+static int total_pkts = 0;
+static uint8_t old_seq = 0x80; 
 
 static void packet_print(uint8_t buf[], int len)
 {
@@ -153,6 +155,38 @@ static void packet_print(uint8_t buf[], int len)
 	}
     }
     printf("\n");
+}
+
+static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_t *fx25_buf, uint8_t *err_buf)
+{
+    printf("FX25:%d:", ax25_len);
+    packet_print(ax25_buf, ax25_len - 2);
+    printf("\tFX25 info: Tag_0%X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+    fx25_decode_pkts++;
+
+    // calculate total packets
+    if (old_seq & 0x80) {
+	total_pkts++;
+	old_seq = ax25_buf[13] >> 1;
+    } else {
+	uint8_t seq = ax25_buf[13] >> 1;
+	total_pkts += (seq - old_seq) & 0x7f;
+	old_seq = seq;
+    }
+
+    // print error value
+    if (err_buf) {
+        int errs = 0;
+        for (int i = 1; i < tags[tag_no].rs_code; i++) { // skip fx25_buf[0], because it is always no error
+	    uint8_t e = err_buf[i] ^ fx25_buf[i];
+	    if (e > 0) {
+	        printf("\tFX25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
+	    }
+	}
+    }
+
+    if (fx25_decode_pkts % 10 == 0) printf("\tTotal: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25/total: %d %%, AX25/total: %d %%\n",
+		    total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts);
 }
 #endif
 
@@ -240,7 +274,7 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		if (ax25_fcs_check(ax25_buf, ax25_len)) {
 		    // success decoding AX.25 packet
 #ifdef CONFIG_TNC_DEMO_MODE
-		    printf("ax25:%d:", ax25_len);
+		    printf("AX25:%d:", ax25_len);
 		    packet_print(ax25_buf, ax25_len - 2);
 		    ax25_decode_pkts++;
 #else
@@ -360,13 +394,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 	    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
 #ifdef CONFIG_TNC_DEMO_MODE
-		printf("fx25:%d:", ax25_len);
-		packet_print(ax25_buf, ax25_len - 2);
-		fx25_decode_pkts++;
-	        printf("\tfx25 info: Tag_0%X, RS(%d, %d)\n", tag_no, rs_code_size, tags[tag_no].rs_info);
-		if (fx25_decode_pkts % 10 == 0) printf("\tReceived packets: fx25: %d pkts, ax25: %d pkts, ax25/fx25 = %d %%\n",
-				fx25_decode_pkts, ax25_decode_pkts, ax25_decode_pkts * 100 / fx25_decode_pkts);
-		//printf("fx25 info: No errors\n");
+		output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, NULL);
 #else
 		packet_output(ax25_buf, ax25_len - 2);
 #endif
@@ -392,23 +420,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 		    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
 #ifdef CONFIG_TNC_DEMO_MODE
-			printf("fx25:%d:", ax25_len);
-			packet_print(ax25_buf, ax25_len - 2);
-			fx25_decode_pkts++;
-			printf("\tfx25 info: Tag_0%X, RS(%d, %d)\n", tag_no, rs_code_size, tags[tag_no].rs_info);
-			printf("\tfx25 info: %d error(s) corrected\n", rs_result);
-
-			// print error value
-			uint8_t errs = 0;
-			for (int i = 1; i < rs_code_size; i++) { // skip fx25_buf[0], because it is always no error
-			    uint8_t e = err_buf[i] ^ fx25_buf[i];
-			    
-			    if (e > 0) {
-			        printf("\tfx25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
-			    }
-			}
-			if (fx25_decode_pkts % 10 == 0) printf("\tReceived packets: fx25: %d pkts, ax25: %d pkts, ax25/fx25 = %d %%\n",
-				fx25_decode_pkts, ax25_decode_pkts, ax25_decode_pkts * 100 / fx25_decode_pkts);
+			output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, err_buf);
 #else
 			packet_output(ax25_buf, ax25_len - 2);
 #endif
@@ -922,6 +934,8 @@ void rx_task(void *p)
 #define UI_CONTROL 0x03
 #define UI_PID 0xf0
 
+static const uint8_t mycall[6] = CONFIG_TNC_BEACON_MYCALL;
+
 #ifndef CONFIG_TNC_DEMO_MODE
 
 // sending a packet periodically for test purpose
@@ -933,7 +947,6 @@ void tx_task(void *p)
     static uint8_t dst_addr[7] = "BEACON";
     static uint8_t src_addr[7] = "      ";
     uint8_t c;
-    const uint8_t r[6] = CONFIG_TNC_BEACON_MYCALL;
     uint8_t *s;
     struct timeval tv;
     int seq = 1;
@@ -941,7 +954,7 @@ void tx_task(void *p)
 
     // callsign
     for (i = 0; i < 6; i++) {
-	c = toupper(r[i]);
+	c = toupper(mycall[i]);
 	if (!isalnum(c)) c = ' ';
 	src_addr[i] = c;
     }
@@ -989,18 +1002,34 @@ void tx_task(void *p)
 
 #else // CONFIG_TNC_DEMO_MODE
 
+#define PKT_BUFSIZE 239
+
 // sending packet for demo purpose
 void tx_task(void *p)
 {
     int idx, len;
     int tnc_mode = get_tnc_mode();
     static unsigned int seed = 1;
+    static uint8_t pkt_buf[PKT_BUFSIZE];
+    int seq= 0;
 
     while (1) {
 	idx = 0;
 	while ((len = packet_table[idx++]) > 0) {
+	    memcpy(pkt_buf, &packet_table[idx], len - 2); // copy packet to rewrite source address
+
+	    // use my callsign as source address
+	    for (int i = 0; i < 6; i++) {
+		uint8_t c = toupper(mycall[i]);
+		if (!isalnum(c)) c = ' ';
+		pkt_buf[i+7] = c << 1; // source address
+	    }
+	    // SSID, store sequnce number
+	    pkt_buf[13] &= 0x01; // clear except address extension bit
+	    pkt_buf[13] |= ++seq << 1;
+
 	    vTaskDelay((10 * 1000 + rand_r(&seed) % 5000) / portTICK_PERIOD_MS);
-	    fx25_send_packet((uint8_t *const)&packet_table[idx], len - 2, 0, tnc_mode); // -2: delete FCS
+	    fx25_send_packet(pkt_buf, len - 2, 0, tnc_mode); // -2: delete FCS
 	    idx += len;
 	}
     }
