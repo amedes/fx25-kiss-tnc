@@ -14,6 +14,7 @@
 #include "bit_stuffing.h"
 #include "ax25.h"
 #include "rs.h"
+#include "config.h"
 
 #define STATE_SEARCH_TAG 1
 #define STATE_DATA 2
@@ -31,6 +32,10 @@
 #define RS_CODE_SIZE 255
 
 #define TAG "fx25_decode"
+
+#ifdef CONFIG_TNC_DEMO_MODE
+int tag_error_pkts = 0;
+#endif
 
 #if 0
 static const int BITS_COUNT_TABLE[256] = {
@@ -137,11 +142,15 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
 
       return i; // find i-th TAG
     }
+#ifdef CONFIG_TNC_DEMO_MODE 
+    else if (count <= 12) {
+      printf("\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
+      tag_error_pkts++;
 #if 0
-    else if (count <= FX25_CORRELATION_CNT + 2) {
       fprintf(stderr, "fx25_decode: correlation tag match %d bits\n", 64 - count);
       fprintf(stderr, "bit_count(%016llx) = %d\n", bits, count);
       fprintf(stderr, "%016llx\n%016llx\n", *correlation_tag, tags[i].tag);
+#endif
     }
 #endif
 
