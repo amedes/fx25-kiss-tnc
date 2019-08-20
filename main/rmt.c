@@ -58,7 +58,7 @@ static int noise(void)
 	    break;
 	case AN_BURST:
 	    if (rand_r(&an_seed) < an_burst) {
-		return (rand_r(&an_seed) < RAND_MAX/2);
+		return 1;
 	    }
 	    an_state = AN_BIT;
     }
