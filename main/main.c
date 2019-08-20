@@ -197,8 +197,10 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
     }
 
     if (fx25_decode_pkts % 5 == 0) {
+	printf("---- Statistics information ----\n");
 	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, tag err: %d, RS err: %d\n",
 		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts, rs_decode_err);
+	printf("----\n");
     }
 }
 #endif
