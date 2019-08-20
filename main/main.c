@@ -126,6 +126,7 @@ static int fx25_decode_pkts = 0;
 static int total_pkts = 0;
 static uint8_t old_seq = 0x80; 
 extern int tag_error_pkts;
+static int rs_decode_err = 0;
 
 static void packet_print(uint8_t buf[], int len)
 {
@@ -162,7 +163,7 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 {
     printf("FX25:%d:", ax25_len);
     packet_print(ax25_buf, ax25_len - 2);
-    printf("\tFX25 info: Tag_0%X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+    //printf("\tFX25 info: Tag_0%X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
     fx25_decode_pkts++;
 
     // calculate total packets
@@ -196,8 +197,8 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
     }
 
     if (fx25_decode_pkts % 5 == 0) {
-	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d %%, AX25%%: %d %%, tag err: %d pkts\n",
-		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts);
+	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, tag err: %d, RS err: %d\n",
+		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts, rs_decode_err);
     }
 }
 #endif
@@ -397,6 +398,10 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 	    int rs_code_size = tags[tag_no].rs_code;
 	    int ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1); // buf[0] is AX.25 flag (7E)
 
+#ifdef CONFIG_TNC_DEMO_MODE
+	    printf("\tFX25 info: detect tag, Tag_%02X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+#endif
+
 #if 0
 	    if (ax25_len <= 2) {
 		printf("fx25_rx(): ax25_len = %d\n", ax25_len);
@@ -446,6 +451,10 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 		    }
 
 		} else {
+#ifdef CONFIG_TNC_DEMO_MODE
+			printf("\tFX25 info: RS decode error\n");
+			rs_decode_err++;
+#endif	
 		    ESP_LOGD(TAG, "fx25_rx: RS decode error: %d", rs_result);
 		    //print_diff(test_packet, ax25_buf, test_packet_len);
 		}
