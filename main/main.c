@@ -1030,7 +1030,7 @@ void tx_task(void *p)
 	    pkt_buf[13] &= 0x01; // clear except address extension bit
 	    pkt_buf[13] |= ++seq << 1;
 
-	    vTaskDelay((10 * 1000 + rand_r(&seed) % 5000) / portTICK_PERIOD_MS);
+	    vTaskDelay((9 * 1000 + rand_r(&seed) % 3000) / portTICK_PERIOD_MS);
 	    fx25_send_packet(pkt_buf, len - 2, 0, tnc_mode); // -2: delete FCS
 	    idx += len;
 	}
