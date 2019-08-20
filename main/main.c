@@ -157,7 +157,7 @@ static void packet_print(uint8_t buf[], int len)
     printf("\n");
 }
 
-static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_t *fx25_buf, uint8_t *err_buf)
+static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_t *fx25_buf, uint8_t *err_buf, int rs_result)
 {
     printf("FX25:%d:", ax25_len);
     packet_print(ax25_buf, ax25_len - 2);
@@ -170,12 +170,21 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 	old_seq = ax25_buf[13] >> 1;
     } else {
 	uint8_t seq = ax25_buf[13] >> 1;
-	total_pkts += (seq - old_seq) & 0x7f;
-	old_seq = seq;
+	uint8_t diff = (seq - old_seq) & 0x7f;
+
+	if (diff < 8) {
+	    total_pkts += (seq - old_seq) & 0x7f;
+	    old_seq = seq;
+	} else { // resync sequence
+	    total_pkts++;
+	    old_seq = 0x80;
+	}
     }
 
     // print error value
     if (err_buf) {
+	printf("\tFX25 info: %d error(s) corrected\n", rs_result);
+
         int errs = 0;
         for (int i = 1; i < tags[tag_no].rs_code; i++) { // skip fx25_buf[0], because it is always no error
 	    uint8_t e = err_buf[i] ^ fx25_buf[i];
@@ -396,7 +405,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 	    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
 #ifdef CONFIG_TNC_DEMO_MODE
-		output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, NULL);
+		output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, NULL, 0);
 #else
 		packet_output(ax25_buf, ax25_len - 2);
 #endif
@@ -422,7 +431,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 
 		    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
 #ifdef CONFIG_TNC_DEMO_MODE
-			output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, err_buf);
+			output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, err_buf, rs_result);
 #else
 			packet_output(ax25_buf, ax25_len - 2);
 #endif
