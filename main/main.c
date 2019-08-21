@@ -82,10 +82,12 @@ static int fx25_rs_miss = 0;
 static int ax25_nrzi_bits = 0;
 static int fx25_bits = 0;
 
+#ifdef CHECK_MISS
 static uint8_t *test_packet;
 static int test_packet_len;
 static uint8_t *test_fx25_buf;
 static int test_fx25_len;
+#endif
 
 #ifdef CONFIG_TNC_BEACON
 static TaskHandle_t tx_task_handle;
@@ -127,6 +129,7 @@ static int total_pkts = 0;
 static uint8_t old_seq = 0x80; 
 extern int tag_error_pkts;
 static int rs_decode_err = 0;
+static int fx25_fcs_err = 0;
 
 static void packet_print(uint8_t buf[], int len)
 {
@@ -198,9 +201,9 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 
     if (fx25_decode_pkts % 5 == 0) {
 	printf("---- Statistics information ----\n");
-	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, tag err: %d, RS err: %d\n",
-		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts, rs_decode_err);
-	printf("----\n");
+	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, Tag err: %d, RS err: %d, FCS err: %d\n",
+		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts, rs_decode_err, fx25_fcs_err);
+	printf("--------------------------------\n");
     }
 }
 #endif
@@ -324,10 +327,12 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		    ax25_nrzi_bits++;
 		    ax25_nrzi_ec_ok++;
 
+#ifdef CHECK_MISS
 		    if (memcmp(test_packet, ax25_buf, test_packet_len) != 0) { // error correction miss
 			    ax25_nrzi_ec_miss++;
 			    //print_diff(test_packet, ax25_buf, test_packet_len);
 		    }
+#endif
 
 		}
 	    }
@@ -447,8 +452,14 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 			fx25_rs_ok++;
 			pkt_ack++;
 
+#ifdef CHECK_MISS
 			if (memcmp(test_packet, ax25_buf, test_packet_len) != 0) fx25_rs_miss++;
+#endif
 		    } else {
+#ifdef CONFIG_TNC_DEMO_MODE
+			printf("\tFX25 info: FX.25 FCS error\n");
+			fx25_fcs_err++;
+#endif
 		        ESP_LOGD(TAG, "fx25_rx: FCS error");
 		    }
 
@@ -458,7 +469,9 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 			rs_decode_err++;
 #endif	
 		    ESP_LOGD(TAG, "fx25_rx: RS decode error: %d", rs_result);
+#ifdef CHECK_MISS
 		    //print_diff(test_packet, ax25_buf, test_packet_len);
+#endif
 		}
 	    }
 	}

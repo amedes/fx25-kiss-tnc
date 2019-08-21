@@ -47,23 +47,23 @@ static unsigned int an_seed = 1;
 /*
  * add bit error for demo
  */
-static int noise(void)
+static int noise(int level)
 {
     switch (an_state) {
 	case AN_BIT:
 	    if (rand_r(&an_seed) < an_bit) {
 		an_state = AN_BURST;
-		return 1;
+		return !level; // invert
 	    }
 	    break;
 	case AN_BURST:
 	    if (rand_r(&an_seed) < an_burst) {
-		return 1;
+		return rand_r(&an_seed) & 1; // random bit
 	    }
 	    an_state = AN_BIT;
     }
 
-    return 0;
+    return level; // no error
 }
 #endif
 
@@ -117,7 +117,7 @@ static void IRAM_ATTR copy_to_rmt(const void *src, rmt_item32_t *dest, size_t sr
 	    pdest->duration0 = bit_time[cnt++]; cnt %= BIT_CYCLE;
 	    if ((m & 1) == 0) level = !level; // NRZI
 #ifdef CONFIG_TNC_DEMO_MODE
-	    pdest->level0 = level ^ noise();
+	    pdest->level0 = noise(level);
 #else
 	    pdest->level0 = level;
 #endif
@@ -125,7 +125,7 @@ static void IRAM_ATTR copy_to_rmt(const void *src, rmt_item32_t *dest, size_t sr
 	    pdest->duration1 = bit_time[cnt++]; cnt %= BIT_CYCLE;
 	    if ((m & 2) == 0) level = !level; // NRZI
 #ifdef CONFIG_TNC_DEMO_MODE
-	    pdest->level1 = level ^ noise();
+	    pdest->level1 = noise(level);
 #else
 	    pdest->level1 = level;
 #endif
