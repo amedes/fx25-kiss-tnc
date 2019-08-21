@@ -143,7 +143,7 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
       return i; // find i-th TAG
     }
 #ifdef CONFIG_TNC_DEMO_MODE 
-    else if (count <= 12) {
+    else if (count <= 13) {
       printf("\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
       tag_error_pkts++;
 #if 0
