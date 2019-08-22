@@ -359,7 +359,7 @@ int rs_decode(gf_t code[], int code_len, int mesg_len)
 	     an, poly_subst(&omega, an), an, poly_subst(&dsigma, an), e, c, n);
 #endif
 
-      if (c == n) printf("rs: error correction return same value: (%02x->%02x)\n", c, n);
+      if (c == n) printf("rs: error correction return same value: e = %02x, (%02x->%02x)\n", e, c, n);
 
       /*printf("m[%d]: old: %d, err: %d, new: %d\n", i, c, e, n);*/
 
