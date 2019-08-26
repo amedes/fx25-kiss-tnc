@@ -35,7 +35,6 @@
 
 #ifdef CONFIG_TNC_DEMO_MODE
 int tag_error_pkts = 0;
-int tag_bit_error = 0;
 #endif
 
 #if 0
@@ -133,7 +132,6 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
 
     bits = *correlation_tag ^ tags[i].tag;
     count = bits ? bit_count(bits) : 0; // set bits if different 
-    tag_bit_error = count; // save for DEMO MODE
 
     if (count <= FX25_CORRELATION_CNT) {
 
@@ -145,9 +143,9 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
       return i; // find i-th TAG
     }
 #ifdef CONFIG_TNC_DEMO_MODE 
-    else if (count <= 12) { // 12bit will cause count miss rate about 1e-3
+    if (count > 0 && count <= 12) { // 12bit will cause count miss rate about 1e-3
       printf("\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
-      tag_error_pkts++;
+      if (count > FX25_CORRELATION_CNT) tag_error_pkts++;
 #if 0
       fprintf(stderr, "fx25_decode: correlation tag match %d bits\n", 64 - count);
       fprintf(stderr, "bit_count(%016llx) = %d\n", bits, count);
