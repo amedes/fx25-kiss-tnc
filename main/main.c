@@ -128,6 +128,7 @@ static int fx25_decode_pkts = 0;
 static int total_pkts = 0;
 static uint8_t old_seq = 0x80; 
 extern int tag_error_pkts;
+extern int tag_bit_error;
 static int rs_decode_err = 0;
 static int fx25_fcs_err = 0;
 
@@ -406,7 +407,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 	    int ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1); // buf[0] is AX.25 flag (7E)
 
 #ifdef CONFIG_TNC_DEMO_MODE
-	    printf("\tFX25 info: detect tag, Tag_%02X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+	    printf("\tFX25 info: detect tag, Tag_%02X, RS(%d, %d), bit error: %d bit(s)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info, tag_bit_error);
 #endif
 
 #if 0
