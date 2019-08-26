@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <sys/time.h>
+//#include <sys/time.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -14,6 +14,7 @@
 
 #include "esp_log.h"
 #include "driver/rmt.h"
+#include "esp_system.h"
 
 #include "config.h"
 #include "rmt.h"
@@ -39,10 +40,9 @@
 #define AN_BIT 0
 #define AN_BURST 1
 
-static int an_bit = RAND_MAX / 1000; // 1e-3
-static int an_burst = RAND_MAX / 2; // 0.5
+static uint32_t an_bit = UINT32_MAX / 1000; // 1e-3
+static uint32_t an_burst = UINT32_MAX / 2; // 0.5
 static int an_state = AN_BIT; // bit error state
-static unsigned int an_seed = 1;
 
 /*
  * add bit error for demo
@@ -51,14 +51,14 @@ static int noise(int level)
 {
     switch (an_state) {
 	case AN_BIT:
-	    if (rand_r(&an_seed) < an_bit) {
+	    if (esp_random() < an_bit) {
 		an_state = AN_BURST;
 		return !level; // invert
 	    }
 	    break;
 	case AN_BURST:
-	    if (rand_r(&an_seed) < an_burst) {
-		return rand_r(&an_seed) & 1; // random bit
+	    if (esp_random() < an_burst) {
+		return esp_random() & 1; // random bit
 	    }
 	    an_state = AN_BIT;
     }
@@ -327,16 +327,18 @@ void rmt_tx_init(void)
 
 #ifdef CONFIG_TNC_DEMO_MODE
     float x;
-    struct timeval tv;
+    //struct timeval tv;
 
     x = atof(CONFIG_TNC_BIT_ERR_RATE);
-    if (x > 0.0 && x < 1.0) an_bit = RAND_MAX * x;
+    printf("Bit error rate %0.3g\n", x);
+    if ((x > 0.0) && (x < 1.0)) an_bit = x * UINT32_MAX;
     x = atof(CONFIG_TNC_BURST_ERR_RATE);
-    if (x > 0.0 && x < 1.0) an_burst = RAND_MAX * x;
-    printf("Bit error rate: %.2g, Burst error rate: %.2g\n", (float)an_bit / RAND_MAX, (float)an_burst / RAND_MAX);
+    printf("Burst error rate %0.3g\n", x);
+    if ((x > 0.0) && (x < 1.0)) an_burst = x * UINT32_MAX;
+    printf("Bit error rate: %.3g, Burst error rate: %.3g\n", (float)an_bit / UINT32_MAX, (float)an_burst / UINT32_MAX);
 
-    gettimeofday(&tv, NULL);
-    an_seed = tv.tv_usec;
+    //gettimeofday(&tv, NULL);
+    //an_seed = tv.tv_usec;
 #endif
 
     xTaskCreate(rmt_send_task, "rmt_send_task", 2048, rmt_ringbuf, 12, NULL);
