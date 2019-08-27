@@ -268,40 +268,78 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
 
     af_buf[ai++] = FEND;
 
+    // send KISS frame
     netconn_write(conn, af_buf, ai, NETCONN_COPY);
 
     return;
 }
 
-static RingbufHandle_t tcp_ringbuf = NULL;
+//static RingbufHandle_t tcp_ringbuf = NULL;
 
 #define TCP_RINGBUF_SIZE (4096)
 
+struct RINGCONN {
+    RingbufHandle_t ringbuf;
+    struct netconn *conn;
+};
+
 void tcp_writer_task(void *p)
 {
-    struct netconn *conn = (struct netconn *)p;
+    struct RINGCONN *rcp = (struct RINGCONN *)p;
     uint8_t *item[2];
     size_t size[2];
 
     while (1) {
-        if (xRingbufferReceiveSplit(tcp_ringbuf, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY) == pdTRUE) { 
+        if (xRingbufferReceiveSplit(rcp->ringbuf, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY) == pdTRUE) { 
 
 	    if (item[0]) {
-	        tcp_send_split(conn, item, size);
-	        vRingbufferReturnItem(tcp_ringbuf, item[0]);
-	        if (item[1]) vRingbufferReturnItem(tcp_ringbuf, item[1]);
+	        tcp_send_split(rcp->conn, item, size);
+	        vRingbufferReturnItem(rcp->ringbuf, item[0]);
+	        if (item[1]) vRingbufferReturnItem(rcp->ringbuf, item[1]);
 	    }
 	}
     }
 }
 
+void tcp_reader_task(void *p)
+{
+    struct netconn *newconn = (struct netconn *)p;
+    struct RINGCONN rc;
+    TaskHandle_t tcp_writer = NULL;
+
+    rc.conn = newconn;
+    rc.ringbuf = xRingbufferCreate(TCP_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
+    if (rc.ringbuf == NULL) {
+	ESP_LOGD(TAG, "xRingbufferCreate() tail\n");
+    }
+    if (rc.ringbuf != NULL) {
+
+	// register ringbuf
+	if (uart_add_ringbuf(rc.ringbuf)) {
+	    if (xTaskCreate(tcp_writer_task, "tcp_write", 1024*4, &rc, tskIDLE_PRIORITY, &tcp_writer) == pdPASS) {
+		tcp_client(newconn);
+		ESP_LOGI(TAG, "tcp_client() returned");
+		vTaskDelete(tcp_writer); // stop writer task
+	    }
+	    // deregister ringbuf
+	    uart_delete_ringbuf(rc.ringbuf);
+	}
+	vRingbufferDelete(rc.ringbuf);
+    }
+
+    netconn_close(newconn);
+    netconn_delete(newconn);
+    ESP_LOGI(TAG, "netconn_delete()\n");
+
+    vTaskDelete(NULL); // delete this task
+}
 
 static void wifi_task(void *p)
 {
     err_t xErr;
     struct netconn *conn;
     struct netconn *newconn;
-    TaskHandle_t tcp_writer = NULL;
+    TaskHandle_t tcp_reader = NULL;
 
     while (1) {
 	xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -320,6 +358,10 @@ static void wifi_task(void *p)
 	    if (xErr != ERR_OK) continue;
 
 	    // create tcp reader task
+	    if (xTaskCreate(tcp_reader_task, "tcp_read", 1024*4, newconn, tskIDLE_PRIORITY, &tcp_reader) != pdTRUE) {
+		ESP_LOGD(TAG, "xTaskCreate(tcp_reader_task) fail\n");
+	    }
+#if 0
 	    tcp_ringbuf = xRingbufferCreate(TCP_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
 	    if (tcp_ringbuf) {
 		// register ringbuf 
@@ -341,6 +383,7 @@ static void wifi_task(void *p)
 
 		vRingbufferDelete(tcp_ringbuf);
 	    }
+#endif
 	}
     }
 }

@@ -449,16 +449,29 @@ static void uart_send_task(void *p)
     }
 }
 
-static RingbufHandle_t  tcp_ringbuf = NULL;
+#define RINGBUF_N 4
 
-void uart_add_ringbuf(RingbufHandle_t ringbuff)
+static RingbufHandle_t tcp_ringbuf[RINGBUF_N];
+
+RingbufHandle_t *uart_add_ringbuf(RingbufHandle_t ringbuf)
 {
-    tcp_ringbuf = ringbuff;
+    for (int i = 0; i < RINGBUF_N; i++) {
+	if (tcp_ringbuf[i] == NULL) {
+	    tcp_ringbuf[i] = ringbuf;
+	    return &tcp_ringbuf[i];
+	}
+    }
+
+    return NULL;
 }
 
-void uart_delete_ringbuf(void)
+void uart_delete_ringbuf(RingbufHandle_t ringbuf)
 {
-    tcp_ringbuf = NULL;
+    for (int i = 0; i < RINGBUF_N; i++) {
+	if (tcp_ringbuf[i] == ringbuf) {
+	    tcp_ringbuf[i] = NULL;
+	}
+    }
 }
 
 void packet_output(uint8_t buf[], int size)
@@ -468,8 +481,10 @@ void packet_output(uint8_t buf[], int size)
     if (xRingbufferSend(uart0_ringbuf, buf, size, 0) != pdTRUE) {
 	ESP_LOGD(UART_TAG, "uart ring buffer full: %d bytes", size);
     }
-    if (tcp_ringbuf && xRingbufferSend(tcp_ringbuf, buf, size, 0) != pdTRUE) {
-	ESP_LOGD(UART_TAG, "tcp ring buffer full: %d bytes", size);
+    for (int i = 0; i < RINGBUF_N; i++) {
+	if (tcp_ringbuf[i] && xRingbufferSend(tcp_ringbuf[i], buf, size, 0) != pdTRUE) {
+	    ESP_LOGD(UART_TAG, "tcp ring buffer[%d] full: %d bytes", i, size);
+	}
     }
 }
 
