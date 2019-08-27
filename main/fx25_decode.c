@@ -133,15 +133,6 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
     bits = *correlation_tag ^ tags[i].tag;
     count = bits ? bit_count(bits) : 0; // set bits if different 
 
-    if (count <= FX25_CORRELATION_CNT) {
-
-      if (count != 0) {
-        ESP_LOGI(TAG, "bit_count(%016llx) = %d", bits, count);
-        ESP_LOGI(TAG, "%016llx\n%016llx\n", *correlation_tag, tags[i].tag);
-      }
-
-      return i; // find i-th TAG
-    }
 #ifdef CONFIG_TNC_DEMO_MODE 
     if (count > 0 && count <= 12) { // 12bit will cause count miss rate about 1e-3
       printf("\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
@@ -153,6 +144,16 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
 #endif
     }
 #endif
+
+    if (count <= FX25_CORRELATION_CNT) {
+
+      if (count != 0) {
+        ESP_LOGI(TAG, "bit_count(%016llx) = %d", bits, count);
+        ESP_LOGI(TAG, "%016llx\n%016llx\n", *correlation_tag, tags[i].tag);
+      }
+
+      return i; // find i-th TAG
+    }
 
   }
 
