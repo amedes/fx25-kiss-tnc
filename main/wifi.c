@@ -24,6 +24,10 @@
 #include "wifi.h"
 #include "uart.h"
 
+#ifdef CONFIG_ESP_WIFI_SOFTAP
+#include "softap.h"
+#endif
+
 //#define USE_WPS 1
 
 /* The examples use WiFi configuration that you can set via 'make menuconfig'.
@@ -227,8 +231,10 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
     int len;
     int total = 0;
 
+#ifndef CONFIG_TNC_DEMO_MODE
     af_buf[ai++] = FEND;
     af_buf[ai++] = 0x00; // channel 0, data frame
+#endif
 
     for (i = 0; i < 2; i++) {
 
@@ -247,6 +253,18 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
 	        c = buf[bi];
 	    }
 
+#ifdef CONFIG_TNC_DEMO_MODE
+
+#define LF '\n'
+#define CR '\r'
+
+	    if (c == LF) {
+		c = LF;
+		next_byte = CR;
+	    } else {
+		bi++;
+	    }
+#else
 	    if (c == FEND) {
 	        c = FESC;
 	        next_byte = TFEND;
@@ -256,6 +274,7 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
 	    } else {
 	        bi++;
 	    }
+#endif
 
 	    af_buf[ai++] = c;
 
@@ -266,7 +285,9 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
 	}
     }
 
+#ifndef CONFIG_TNC_DEMO_MODE
     af_buf[ai++] = FEND;
+#endif
 
     // send KISS frame
     netconn_write(conn, af_buf, ai, NETCONN_COPY);
@@ -342,8 +363,10 @@ static void wifi_task(void *p)
     TaskHandle_t tcp_reader = NULL;
 
     while (1) {
+#ifndef CONFIG_ESP_WIFI_SOFTAP
 	xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
 	ESP_LOGI(TAG, "WiFi connected");
+#endif
 
 	conn = netconn_new_with_callback(NETCONN_TCP, callback);
 	if (conn == NULL) continue;
@@ -388,6 +411,69 @@ static void wifi_task(void *p)
     }
 }
 
+#define HTTP_PORT 80
+#define HTTP_BUFSIZ 200 
+
+static const char http_tag[] = "http";
+extern int total_pkts;
+extern int fx25_decode_pkts;
+extern int ax25_decode_pkts;
+extern int tag_error_pkts;
+extern int rs_decode_err;
+extern int fx25_fcs_err;
+
+static void http_task(void *p)
+{
+    err_t xErr;
+    struct netconn *conn;
+    struct netconn *newconn;
+    static char http_head[] = "HTTP/1.0 200 OK\r\n\r\n<html><head><title>Statistics</title></head><body>";
+    static char http_buf[HTTP_BUFSIZ];
+    int len;
+
+    conn = netconn_new(NETCONN_TCP);
+    if (conn == NULL) {
+	ESP_LOGD(http_tag, "netconn_new() fail");
+	vTaskDelete(NULL); // terminate task
+    }
+
+    xErr = netconn_bind(conn, IP_ADDR_ANY, HTTP_PORT);
+    if (xErr != ERR_OK) {
+	ESP_LOGD(http_tag, "netconn_bind() fail");
+	vTaskDelete(NULL);
+    }
+
+    xErr = netconn_listen(conn);
+    if (xErr != ERR_OK) {
+	ESP_LOGD(http_tag, "netconn_listen() fail");
+	vTaskDelete(NULL);
+    }
+
+    while (1) {
+	xErr = netconn_accept(conn, &newconn);
+	if (xErr != ERR_OK) continue;
+
+	netconn_write(newconn, http_head, sizeof(http_head) - 1, NETCONN_NOCOPY);
+
+	len = snprintf(http_buf, HTTP_BUFSIZ,
+			"Total: %d pkts<br>"
+			"FX25: %d pkts<br>"
+			"AX25: %d pkts<br>"
+			"FX25%%: %d %%<br>"
+			"AX25%%: %d %%<br>"
+			"Tag err: %d<br>"
+			"RS err: %d<br>"
+			"FCS err: %d<br>"
+			"</body></html>",
+			total_pkts, fx25_decode_pkts, ax25_decode_pkts,
+			fx25_decode_pkts*100/total_pkts, ax25_decode_pkts*100/total_pkts,
+			tag_error_pkts, rs_decode_err, fx25_fcs_err);
+
+	netconn_write(newconn, http_buf, len, NETCONN_COPY);
+	netconn_close(newconn);
+    }
+}
+
 static void wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
@@ -425,6 +511,7 @@ static void wifi_init_sta(void)
 
 void wifi_start(void)
 {
+#ifndef CONFIG_ESP_WIFI_SOFTAP
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -435,6 +522,9 @@ void wifi_start(void)
     
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta();
-
+#else
+    softap_init();
+    xTaskCreate(http_task, "http_task", 4096, NULL, tskIDLE_PRIORITY, NULL);
+#endif
     xTaskCreate(wifi_task, "wifi_task", 4096, NULL, tskIDLE_PRIORITY, NULL);
 }

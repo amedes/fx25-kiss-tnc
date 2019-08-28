@@ -123,13 +123,18 @@ static void print_diff(uint8_t buf0[], uint8_t buf1[], int len)
 
 #ifdef CONFIG_TNC_DEMO_MODE
 
-static int ax25_decode_pkts = 0;
-static int fx25_decode_pkts = 0;
-static int total_pkts = 0;
+int ax25_decode_pkts = 0;
+int fx25_decode_pkts = 0;
+int total_pkts = 0;
 static uint8_t old_seq = 0x80; 
 extern int tag_error_pkts;
-static int rs_decode_err = 0;
-static int fx25_fcs_err = 0;
+int rs_decode_err = 0;
+int fx25_fcs_err = 0;
+
+#define INFO_BUF_SIZE 256
+
+static char info_buf[INFO_BUF_SIZE];
+static int info_len;
 
 static void packet_print(uint8_t buf[], int len)
 {
@@ -144,28 +149,30 @@ static void packet_print(uint8_t buf[], int len)
 	    if (i % 7 == 6) { // SSID
 	        uint8_t ssid = d & 0x0f;
 
-		if (ssid > 0) printf("-%d", ssid);
-		printf("%c", (in_addr) ? ',' : ':');
+		if (ssid > 0) info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "-%d", ssid);
+		info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "%c", (in_addr) ? ',' : ':');
 	    } else if (((d >= 'A') && (d <= 'Z')) || ((d >= '0') && (d <= '9'))) { // 
-		printf("%c", d);
+		info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "%c", d);
 	    } else if (d != ' ') {
-		    printf("<%02x>", c);
+		    info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "<%02x>", c);
 	    }
 	} else {
 	    if ((c >= ' ') && (c <= '~')) { // printable char.
-	       	printf("%c", c);
+		info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "%c", c);
 	    } else {
-		printf("<%02x>", c);
+		info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "<%02x>", c);
 	    }
 	}
     }
-    printf("\n");
+    info_len += snprintf(info_buf + info_len, INFO_BUF_SIZE - info_len, "\n");
 }
+
 
 static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_t *fx25_buf, uint8_t *err_buf, int rs_result)
 {
-    printf("FX25:%d:", ax25_len);
+    info_len = snprintf(info_buf, INFO_BUF_SIZE, "FX25:%d:", ax25_len);
     packet_print(ax25_buf, ax25_len - 2);
+    packet_output((uint8_t *)info_buf, info_len);
     //printf("\tFX25 info: Tag_0%X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
     fx25_decode_pkts++;
 
@@ -188,22 +195,29 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 
     // print error value
     if (err_buf) {
-	printf("\tFX25 info: %d error(s) corrected\n", rs_result);
+	info_len = snprintf(info_buf, INFO_BUF_SIZE, "\tFX25 info: %d error(s) corrected\n", rs_result);
+	packet_output((uint8_t *)info_buf, info_len);
 
         int errs = 0;
         for (int i = 1; i < tags[tag_no].rs_code; i++) { // skip fx25_buf[0], because it is always no error
 	    uint8_t e = err_buf[i] ^ fx25_buf[i];
 	    if (e > 0) {
-	        printf("\tFX25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
+	        info_len = snprintf(info_buf, INFO_BUF_SIZE, "\tFX25 info: error correction: No.%d, e(%d) = %02x\n", ++errs, i, e);
+		packet_output((uint8_t *)info_buf, info_len);
 	    }
 	}
     }
 
     if (fx25_decode_pkts % 5 == 0) {
-	printf("---- Statistics information ----\n");
-	printf("Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, Tag err: %d, RS err: %d, FCS err: %d\n",
+	info_len = snprintf(info_buf, INFO_BUF_SIZE, "---- Statistics information ----\n");
+	packet_output((uint8_t *)info_buf, info_len);
+
+	info_len = snprintf(info_buf, INFO_BUF_SIZE, "Total: %d pkts, FX25: %d pkts, AX25: %d pkts, FX25%%: %d%%, AX25%%: %d%%, Tag err: %d, RS err: %d, FCS err: %d\n",
 		total_pkts, fx25_decode_pkts, ax25_decode_pkts, fx25_decode_pkts * 100 / total_pkts, ax25_decode_pkts * 100 / total_pkts, tag_error_pkts, rs_decode_err, fx25_fcs_err);
-	printf("--------------------------------\n");
+	packet_output((uint8_t *)info_buf, info_len);
+
+	info_len = snprintf(info_buf, INFO_BUF_SIZE, "--------------------------------\n");
+	packet_output((uint8_t *)info_buf, info_len);
     }
 }
 #endif
@@ -292,8 +306,9 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		if (ax25_fcs_check(ax25_buf, ax25_len)) {
 		    // success decoding AX.25 packet
 #ifdef CONFIG_TNC_DEMO_MODE
-		    printf("AX25:%d:", ax25_len);
+		    info_len = snprintf(info_buf, INFO_BUF_SIZE, "AX25:%d:", ax25_len);
 		    packet_print(ax25_buf, ax25_len - 2);
+		    packet_output((uint8_t *)info_buf, info_len);
 		    ax25_decode_pkts++;
 #else
 		    // stop decodding FX.25 packet
@@ -406,7 +421,8 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 	    int ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1); // buf[0] is AX.25 flag (7E)
 
 #ifdef CONFIG_TNC_DEMO_MODE
-	    printf("\tFX25 info: detect tag, Tag_%02X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+	    info_len = snprintf(info_buf, INFO_BUF_SIZE, "\tFX25 info: detect tag, Tag_%02X, RS(%d, %d)\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info);
+	    packet_output((uint8_t *)info_buf, info_len);
 #endif
 
 #if 0

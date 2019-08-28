@@ -100,6 +100,13 @@ config KISS_TCPIP_PORT
     depends on USE_WIFI
     default 8000
 
+config ESP_WIFI_SOFTAP
+    bool "Enable Access Point mode"
+    depends on USE_WIFI
+    default n
+    help
+	TNC become Wi-Fi Access Point.
+
 config TNC_BEACON
     bool "Enable Beacon"
     default n

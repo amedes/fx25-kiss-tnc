@@ -15,6 +15,11 @@
 #include "ax25.h"
 #include "rs.h"
 #include "config.h"
+#ifdef CONFIG_TNC_DEMO_MODE
+#include "freertos/freertos.h"
+#include "freertos/ringbuf.h"
+#include "uart.h"
+#endif
 
 #define STATE_SEARCH_TAG 1
 #define STATE_DATA 2
@@ -135,7 +140,12 @@ int fx25_search_tag(uint64_t *correlation_tag, int data_bit)
 
 #ifdef CONFIG_TNC_DEMO_MODE 
     if (count > 0 && count <= 12) { // 12bit will cause count miss rate about 1e-3
-      printf("\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
+#define INFO_BUF_SIZE 80
+      char buf[INFO_BUF_SIZE];
+      int len;
+
+      len = snprintf(buf, INFO_BUF_SIZE, "\tFX25 info: Tag error %d bits, bit pattern: %016llx\n", count, bits);
+      packet_output((uint8_t *)buf, len);
       if (count > FX25_CORRELATION_CNT) tag_error_pkts++;
 #if 0
       fprintf(stderr, "fx25_decode: correlation tag match %d bits\n", 64 - count);

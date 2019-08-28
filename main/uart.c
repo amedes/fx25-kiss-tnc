@@ -366,12 +366,14 @@ static void uart_send_split(uint8_t *item[], size_t size[])
     int len;
     int total = 0;
 
+#ifndef CONFIG_TNC_DEMO_MODE
 #ifdef PRINT_ESC
     af_buf[ai++] = 'F';
     af_buf[ai++] = '0';
 #else
     af_buf[ai++] = FEND;
     af_buf[ai++] = 0x00; // channel 0, data frame
+#endif
 #endif
 
     for (i = 0; i < 2; i++) {
@@ -391,6 +393,18 @@ static void uart_send_split(uint8_t *item[], size_t size[])
 	        c = buf[bi];
 	    }
 
+#ifdef CONFIG_TNC_DEMO_MODE
+
+#define LF '\n'
+#define CR '\r'
+
+	    if (c == LF) {
+		c = LF;
+		next_byte = CR;
+	    } else {
+		bi++;
+	    }
+#else
 	    if (c == FEND) {
 	        c = FESC;
 	        next_byte = TFEND;
@@ -400,6 +414,7 @@ static void uart_send_split(uint8_t *item[], size_t size[])
 	    } else {
 	        bi++;
 	    }
+#endif
 
 #ifdef PRINT_ESC
 	    af_buf[ai++] = isprint(c) ? c : '.';
@@ -413,10 +428,12 @@ static void uart_send_split(uint8_t *item[], size_t size[])
 	}
     }
 
+#ifndef CONFIG_TNC_DEMO_MODE
 #ifdef PRINT_ESC
     af_buf[ai++] = 'F';
 #else
     af_buf[ai++] = FEND;
+#endif
 #endif
 
     uart_write_bytes(UART_NUM, af_buf, ai);
@@ -482,7 +499,7 @@ void packet_output(uint8_t buf[], int size)
 	ESP_LOGD(UART_TAG, "uart ring buffer full: %d bytes", size);
     }
     for (int i = 0; i < RINGBUF_N; i++) {
-	if (tcp_ringbuf[i] && xRingbufferSend(tcp_ringbuf[i], buf, size, 0) != pdTRUE) {
+	if (tcp_ringbuf[i] && xRingbufferSend(tcp_ringbuf[i], buf, size, 0) != pdTRUE) { // 0: no wait
 	    ESP_LOGD(UART_TAG, "tcp ring buffer[%d] full: %d bytes", i, size);
 	}
     }
