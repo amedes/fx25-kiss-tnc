@@ -21,6 +21,8 @@ set(COMPONENT_SRCS
 "tx_cntl.c"
 "uart.c"
 "wifi.c"
+"softap.c"
+"softap.h"
 )
 set(COMPONENT_ADD_INCLUDEDIRS ".")
 
