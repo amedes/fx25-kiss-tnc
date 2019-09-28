@@ -311,7 +311,7 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		    packet_output((uint8_t *)info_buf, info_len);
 		    ax25_decode_pkts++;
 #else
-		    // stop decodding FX.25 packet
+		    // stop decoding FX.25 packet
 		    fx25_decode_bit(-1, NULL, 0);
 
 		    // output packet to serial

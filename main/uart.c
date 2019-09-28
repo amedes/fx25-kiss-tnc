@@ -167,6 +167,8 @@ void uart_af_read(int num, int size)
     int d;
     static enum AF_STATE state = AF_IDLE;
 
+    ESP_LOGI(TAG, "uart_af_read: state = %d", state);
+
     if (size <= 0) {	// reset internal state
 	state = AF_IDLE;
 	ai = 0;
@@ -178,6 +180,7 @@ void uart_af_read(int num, int size)
 	if (len > UART_BUF_SIZE) len = UART_BUF_SIZE;
 
         len = uart_read_bytes(num, uart_buf, len, 0);
+	ESP_LOGI(TAG, "uart_read_bytes: len = %d", len);
 
 	if (len <= 0) {		// some error occured
 	    uart_flush_input(num);
@@ -187,20 +190,24 @@ void uart_af_read(int num, int size)
         for (i = 0; i < len; i++) {
 	    c = uart_buf[i];
 	    d = -1;
+	    //ESP_LOGI(TAG, "uart_buf[%d] = %02x", i, c);
 
 	    switch (state) {
 		case AF_IDLE:	// between async frame
 		    if (c == FEND) { // start of async frame
 		        state = AF_FEND;
 			ai = 0;
+			ESP_LOGI(TAG, "FEND");
 		    }
 		    break;
 
 	        case AF_FEND:	// process async frame data
 		    switch (c) {
 		        case FEND:	// end of async frame
+			    ESP_LOGI(TAG, "FEND: ai = %d", ai);
 		            if (ai > 0) {
 				input_packet(af_buf, ai); // process input packet
+				ESP_LOGI(TAG, "input_packet: ai = %d", ai);
 				state = AF_IDLE;
 			    }
 			    break;
@@ -235,6 +242,7 @@ void uart_af_read(int num, int size)
 	size -= len;
     }
 
+    ESP_LOGI(TAG, "uart_af_read: return, state = %d, ai = %d", state, ai);
 }
 
 static void uart_event_task(void *pvParameters)
@@ -247,16 +255,16 @@ static void uart_event_task(void *pvParameters)
         //Waiting for UART event.
         if(xQueueReceive(uart0_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
             //bzero(dtmp, RD_BUF_SIZE);
-            //ESP_LOGI(TAG, "uart[%d] event:", EX_UART_NUM);
+            ESP_LOGI(TAG, "uart[%d] event:", EX_UART_NUM);
             switch(event.type) {
                 //Event of UART receving data
                 /*We'd better handler data event fast, there would be much more data events than
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
                 case UART_DATA:
-		    //ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+		    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                     uart_af_read(EX_UART_NUM, event.size);
-		    //ESP_LOGI(TAG, "[UART EVT]:");
+		    ESP_LOGI(TAG, "[UART EVT]:");
                     break;
 
                 //Event of HW FIFO overflow detected
@@ -518,14 +526,14 @@ void uart_init(void)
         .stop_bits = UART_STOP_BITS_1,
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
     };
-    uart_param_config(EX_UART_NUM, &uart_config);
+    ESP_ERROR_CHECK(uart_param_config(EX_UART_NUM, &uart_config));
 
     //Set UART log level
     //esp_log_level_set(TAG, ESP_LOG_INFO);
     //Set UART pins (using UART0 default pins ie no changes.)
-    uart_set_pin(EX_UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    ESP_ERROR_CHECK(uart_set_pin(EX_UART_NUM, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     //Install UART driver, and get the queue.
-    uart_driver_install(EX_UART_NUM, RX_BUF_SIZE, TX_BUF_SIZE, UART_QUEUE_SIZE, &uart0_queue, 0);
+    ESP_ERROR_CHECK(uart_driver_install(EX_UART_NUM, RX_BUF_SIZE, TX_BUF_SIZE, UART_QUEUE_SIZE, &uart0_queue, 0));
 
     //Set uart pattern detect function.
     //uart_enable_pattern_det_intr(EX_UART_NUM, '+', PATTERN_CHR_NUM, 10000, 10, 10);
@@ -533,12 +541,18 @@ void uart_init(void)
     //uart_pattern_queue_reset(EX_UART_NUM, 20);
 
     //Create a task to handler UART event from ISR
-    xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+    if (xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL) != pdPASS) {
+	ESP_LOGE(TAG, "uart_event_task creation fail");
+	abort();
+    }
 
     uart0_ringbuf = xRingbufferCreate(UART_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
     if (uart0_ringbuf == NULL) {
 	ESP_LOGD(TAG, "can not allocate ring buffer");
 	abort();
     }
-    xTaskCreate(uart_send_task, "uart_send_task", 2048, uart0_ringbuf, 12, NULL);
+    if (xTaskCreate(uart_send_task, "uart_send_task", 2048, uart0_ringbuf, 12, NULL) != pdPASS) {
+	ESP_LOGE(TAG, "uart_send_task creation fail");
+	abort();
+    }
 }
