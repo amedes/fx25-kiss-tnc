@@ -8,5 +8,6 @@
 int ax25_fcs(uint8_t packet[], int packet_len);
 int ax25_fcs_check(uint8_t buf[], int len);
 int ax25_count_bit_length(uint8_t packet[], int length);
+char *ax25_call_to_addr(const char *callsign);
 
 #endif /* __AX25_H__ */

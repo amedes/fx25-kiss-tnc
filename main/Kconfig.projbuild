@@ -128,6 +128,41 @@ config TNC_BEACON_LEN
     range 18 1024
     default 128
 
+config TNC_STATISTICS
+    bool "Enable FX.25 packet information output"
+    default n
+
+config TNC_APRS_MESSAGES
+    bool "Enable FX.25 packet information output to APRS gateway by air"
+    depends on TNC_STATISTICS
+    default n
+
+config TNC_APRS_IS_SEND
+    bool "Enable FX.25 packet information output to APRS-IS server"
+    depends on TNC_STATISTICS
+    default n
+
+config TNC_APRS_IS_SERVER
+    string "APRS-IS server host name"
+    depends on TNC_APRS_IS_SEND
+    default "example.com"
+
+config TNC_APRS_IS_PORT
+    int "APRS-IS UDP submit port number"
+    depends on TNC_APRS_IS_SEND
+    range 1024 65535
+    default 8080
+
+config TNC_APRS_IS_CALLSIGN
+    string "Registered your callsign"
+    depends on TNC_APRS_IS_SEND
+    default "NOCALL"
+
+config TNC_APRS_IS_PASSCODE
+    string "Registered your passcode"
+    depends on TNC_APRS_IS_SEND
+    default "-1"
+
 config ESP_GPIO_RXD
     int "GPIO No. connected to RXD"
     range 0 39

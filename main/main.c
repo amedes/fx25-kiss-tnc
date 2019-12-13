@@ -15,6 +15,11 @@
 #include <driver/uart.h>
 #include <esp_log.h>
 
+#include "lwip/api.h"
+#include "lwip/tcp.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+
 #include "rmt.h"
 #include "gpio.h"
 #include "mcpwm.h"
@@ -105,6 +110,21 @@ static void print_buf(uint8_t buf[], int len)
     }
     printf("\n");
 }
+#endif
+
+#ifdef CONFIG_TNC_STATISTICS
+static struct FX25_STAT {
+    uint8_t from[7];
+    int count;
+    int fcs_error;
+    int rs_decode;
+    int len;
+    int rs_code;
+    int rs_info;
+    int error_bytes;
+    int ax25_ok;
+    int ax25_cnt;
+} fx25_stat = { "", 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 #endif
 
 static void print_diff(uint8_t buf0[], uint8_t buf1[], int len)
@@ -222,6 +242,142 @@ static void output_fx25_info(int tag_no, uint8_t *ax25_buf, int ax25_len, uint8_
 }
 #endif
 
+#ifdef CONFIG_TNC_STATISTICS
+#define APRS_MSG_LEN 128
+#define AX25_ADDR_LEN 7
+#define AX25_ADDR_SSID 6
+#define AX25_MSG_TOP (7 + 7 + 1 + 1)
+
+#ifdef CONFIG_TNC_APRS_IS_SEND
+void fx25_send_aprsis(const char aprs_msg[])
+{
+    // send to APRS-IS
+    static char aprs_udp_msg[APRS_MSG_LEN] = "user " CONFIG_TNC_APRS_IS_CALLSIGN " pass " CONFIG_TNC_APRS_IS_PASSCODE "\r\n" CONFIG_TNC_APRS_IS_CALLSIGN ">APZF25,TCPIP*:";
+    static int udp_msg_top = 0;
+
+    if (udp_msg_top == 0) udp_msg_top = strlen(aprs_udp_msg);
+
+    aprs_udp_msg[udp_msg_top] = '\0';
+
+    strncat(aprs_udp_msg, &aprs_msg[AX25_MSG_TOP], APRS_MSG_LEN);
+    ESP_LOGI(TAG, "aprs_udp_msg: %s", aprs_udp_msg);
+
+    struct netconn *conn = NULL;
+    struct ip_addr addr;
+    struct netbuf *nbuf = NULL;
+    err_t err;
+
+    do {
+        err = netconn_gethostbyname(CONFIG_TNC_APRS_IS_SERVER, &addr);
+	if (err != ERR_OK) break;
+	ESP_LOGI(TAG, "netconn_gethostbyname()");
+
+        conn = netconn_new(NETCONN_UDP);
+        if (conn == NULL) break;
+	ESP_LOGI(TAG, "netconn_new()");
+
+        err = netconn_connect(conn, &addr, CONFIG_TNC_APRS_IS_PORT);
+        if (err != ERR_OK) break;
+	ESP_LOGI(TAG, "netconn_connect()");
+
+        nbuf = netbuf_new();
+        if (nbuf == NULL) break;
+	ESP_LOGI(TAG, "netbuf_new()");
+
+        err = netbuf_ref(nbuf, aprs_udp_msg, strlen(aprs_udp_msg));
+        if (err != ERR_OK) break;
+	ESP_LOGI(TAG, "netbuf_ref()");
+	
+        err = netconn_send(conn, nbuf);
+        if (err != ERR_OK) break;
+	ESP_LOGI(TAG, "netconn_send():");
+    } while (0);
+    if (nbuf) netbuf_delete(nbuf);
+    if (conn) netconn_delete(conn);
+
+    return;
+}    
+#endif
+
+void fx25_output_statistics(struct FX25_STAT *fx25p)
+{
+    static uint8_t aprs_msg[APRS_MSG_LEN];
+    int index;
+    char src_addr[10];
+    int ssid;
+    int i;
+    // dst 'APZF25'
+    const char dst_addr[AX25_ADDR_LEN] = { 'A' << 1, 'P' << 1, 'Z' << 1, 'F' << 1, '2' << 1, '5' << 1, 0x60 };
+
+#if 0
+    printf("fx25_output_statistics(): source_callsign: ");
+    for (i = 0; i < 7; i++) {
+	uint8_t c = source_callsign[i];
+
+	if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) printf("%c", c);
+	else printf("<%02x>", c);
+    }
+    printf("\n");
+#endif
+
+    memcpy(aprs_msg, dst_addr, AX25_ADDR_LEN); index = AX25_ADDR_LEN;
+    aprs_msg[index - 1] |= source_callsign[AX25_ADDR_LEN - 1] & 0x80; // SSID, copy command/response bit
+    memcpy(aprs_msg + index, source_callsign, AX25_ADDR_LEN); index += AX25_ADDR_LEN;
+    aprs_msg[index - 1] |= 0x01; // SSID, set extension bit (LSb)
+
+    aprs_msg[index++] = 0x03; // control, UI frame
+    aprs_msg[index++] = 0xf0; // PID, no layer 3 protocol
+
+    // Addressee
+    memcpy(&aprs_msg[index], ":FX25INFO :", 11); index += 11;
+
+    // decode callsign to ASCII
+    for (i = 0; i < 6; i++) {
+	uint8_t c = fx25p->from[i] >> 1;
+
+	if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) {
+	    src_addr[i] = c;
+	} else {
+	    break;
+	}
+    }
+    src_addr[i] = '\0';
+
+    ssid = (fx25p->from[AX25_ADDR_SSID] >> 1)  & 0x0f;
+    if (ssid > 0) snprintf(&src_addr[i], 10 - i, "-%d", ssid);
+
+    if (fx25p->ax25_ok) fx25p->ax25_cnt++;
+
+    index += snprintf((char *)&aprs_msg[index], APRS_MSG_LEN - index - 2,
+		    "%s cnt=%d ax=%d FCS_err=%d RS_dec=%d len=%d RS=%d,%d e_sym=%d",
+		    src_addr,
+		    fx25p->count,
+		    fx25p->ax25_cnt,
+		    fx25p->fcs_error,
+		    fx25p->rs_decode,
+		    fx25p->len,
+		    fx25p->rs_code,
+		    fx25p->rs_info,
+		    fx25p->error_bytes);
+
+    if (aprs_msg[index - 1] == 0) index--; // delete '\0'
+
+    // output packet to uart
+    packet_output(aprs_msg, index); // to uart
+
+#ifdef CONFIG_TNC_APRS_MESSAGES
+    // send to aprs via RF
+    if (source_callsign[AX25_ADDR_SSID] != 0) fx25_send_packet(aprs_msg, index, 0, AX25_MODE); // send to air
+#endif
+
+#ifdef CONFIG_TNC_APRS_IS_SEND
+    // send to aprs via Internet
+    fx25_send_aprsis((char *)aprs_msg);
+#endif
+
+}
+#endif
+
 /*
  * AX.25 receive processing
  *
@@ -252,6 +408,10 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 	bit_tm = 0;
 	bit_sum = 0;
 	ax25_nrzi_bit(-1, NULL, 0);
+
+#ifdef CONFIG_TNC_STATISTICS
+	fx25_stat.ax25_ok = 0; // clear AX.25 decode success flag
+#endif
 
 	return 0;
     }
@@ -311,8 +471,13 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		    packet_output((uint8_t *)info_buf, info_len);
 		    ax25_decode_pkts++;
 #else
+
+#ifdef CONFIG_TNC_STATISTICS
+		    fx25_stat.ax25_ok = 1; // AX.25 decode success
+#else
 		    // stop decoding FX.25 packet
 		    fx25_decode_bit(-1, NULL, 0);
+#endif
 
 		    // output packet to serial
 		    packet_output(ax25_buf, ax25_len - 2);
@@ -432,15 +597,35 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 	    }
 #endif
 
+#if CONFIG_TNC_STATISTICS
+	    // statistics info
+	    fx25_stat.count++;
+	    fx25_stat.rs_code = tags[tag_no].rs_code;
+	    fx25_stat.rs_info = tags[tag_no].rs_info;
+	    fx25_stat.error_bytes = 0;
+#endif
+
 	    if ((ax25_len > 2) && ax25_fcs_check(ax25_buf, ax25_len)) {
 #ifdef CONFIG_TNC_DEMO_MODE
 		output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, NULL, 0);
 #else
+#ifdef CONFIG_TNC_STATISTICS
+		if (!fx25_stat.ax25_ok) packet_output(ax25_buf, ax25_len - 2);
+		memcpy(fx25_stat.from, &ax25_buf[7], 7); // copy source address
+		fx25_stat.len = ax25_len;
+		fx25_output_statistics(&fx25_stat);
+#else
 		packet_output(ax25_buf, ax25_len - 2);
+#endif
 #endif
 		pkt_ack++;
 		fx25_bits++;
+
 	    } else {
+
+#ifdef CONFIG_TNC_STATISTICS
+		fx25_stat.fcs_error++;
+#endif
 
 		//print_diff(test_fx25_buf, fx25_buf, test_fx25_len);
 
@@ -450,6 +635,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 		memcpy(err_buf, fx25_buf, rs_code_size);
 
 		int rs_result = fx25_rsdecode(fx25_buf, tag_no); // RS error correction
+
 
 		if (rs_result >= 0) {
 
@@ -462,7 +648,16 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 #ifdef CONFIG_TNC_DEMO_MODE
 			output_fx25_info(tag_no, ax25_buf, ax25_len, fx25_buf, err_buf, rs_result);
 #else
+#ifdef CONFIG_TNC_STATISTICS
+			if (!fx25_stat.ax25_ok) packet_output(ax25_buf, ax25_len - 2);
+			memcpy(fx25_stat.from, &ax25_buf[7], 7); // copy source address
+			fx25_stat.len = ax25_len;
+			fx25_stat.rs_decode++;
+			fx25_stat.error_bytes = rs_result;
+			fx25_output_statistics(&fx25_stat);
+#else
 			packet_output(ax25_buf, ax25_len - 2);
+#endif
 #endif
 			fx25_bits++;
 			fx25_rs_ok++;
@@ -476,13 +671,14 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0)
 			printf("\tFX25 info: FX.25 FCS error\n");
 			fx25_fcs_err++;
 #endif
+
 		        ESP_LOGD(TAG, "fx25_rx: FCS error");
 		    }
 
 		} else {
 #ifdef CONFIG_TNC_DEMO_MODE
-			printf("\tFX25 info: RS decode error\n");
-			rs_decode_err++;
+		    printf("\tFX25 info: RS decode error\n");
+		    rs_decode_err++;
 #endif	
 		    ESP_LOGD(TAG, "fx25_rx: RS decode error: %d", rs_result);
 #ifdef CHECK_MISS
@@ -986,7 +1182,7 @@ void rx_task(void *p)
 #define UI_CONTROL 0x03
 #define UI_PID 0xf0
 
-static const uint8_t mycall[6] = CONFIG_TNC_BEACON_MYCALL;
+static const uint8_t mycall[] = CONFIG_TNC_BEACON_MYCALL;
 
 #ifndef CONFIG_TNC_DEMO_MODE
 
@@ -996,20 +1192,34 @@ void tx_task(void *p)
     int len;
     int i, j;
     static uint8_t ax25_data[PKT_LEN];
-    static uint8_t dst_addr[7] = "BEACON";
-    static uint8_t src_addr[7] = "      ";
-    uint8_t c;
+    static uint8_t dst_addr[7] = { 'B' << 1, 'E' << 1, 'A' << 1, 'C' << 1, 'O' << 1, 'N' << 1, SSID };
+    static uint8_t src_addr[7] = { 'N' << 1, 'O' << 1, 'C' << 1, 'A' << 1, 'L' << 1, 'L' << 1, SSID | 0x01 };;
     uint8_t *s;
     struct timeval tv;
     int seq = 1;
     int tnc_mode = get_tnc_mode(); // get default TNC mode
 
+    // callsign to AX.25 addr
+    s = (uint8_t *)ax25_call_to_addr((char *)mycall);
+    if (s) {
+	memcpy(src_addr, s, 7);
+	src_addr[6] |= 0x01;
+    }
+
+#if 0
     // callsign
     for (i = 0; i < 6; i++) {
 	c = toupper(mycall[i]);
 	if (!isalnum(c)) c = ' ';
 	src_addr[i] = c;
     }
+#endif
+
+    i = 0;
+    memcpy(&ax25_data[i], dst_addr, 7); i += 7;
+    memcpy(&ax25_data[i], src_addr, 7); i += 7;
+    ax25_data[i++] = UI_CONTROL; // Control 0x03, UI frame
+    ax25_data[i++] = UI_PID;     // PID 0xf0, no layer 3 protocol
 
     while (1) {
 	vTaskDelay(CONFIG_TNC_BEACON_INTERVAL * 1000 / portTICK_PERIOD_MS);
@@ -1018,17 +1228,7 @@ void tx_task(void *p)
 	len = PKT_LEN; // longest packet
 	for (i = 0; i < len; i++) ax25_data[i] = rand() & 0xff;
 #else
-	i = 0;
-	s = dst_addr;
-	for (j = 0; j < 6; j++) ax25_data[i++] = *s++ << 1; // address field encoding
-	ax25_data[i++] = SSID;
-
-	s = src_addr;
-	for (j = 0; j < 6; j++) ax25_data[i++] = *s++ << 1; // address field encoding
-	ax25_data[i++] = SSID | 0x01; // end of address
-
-	ax25_data[i++] = UI_CONTROL; // Control 0x03, UI frame
-	ax25_data[i++] = UI_PID;     // PID 0xf0, no layer 3 protocol
+	i = 16;
 
 	gettimeofday(&tv, NULL);
 

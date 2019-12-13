@@ -203,9 +203,14 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
 }
 
 #define MAX_PKT_SIZE 1024
+#define MIN_PKT_SIZE (7 + 7 + 1 + 1)
 #define AX25_BUF_SIZE (MAX_PKT_SIZE + 2)
 #define BITS_BUF_SIZE 1195
 #define FX25_BUF_SIZE (4 + 8 + 255*5 + 1)
+
+#ifdef CONFIG_TNC_STATISTICS
+uint8_t source_callsign[7] = { 'N' << 1, 'O' << 1, 'C' << 1, 'A' << 1, 'L' << 1, 'L' << 1, 0 };
+#endif
 
 void fx25_send_packet(uint8_t buf[], int size, int wait, int tnc_mode)
 {
@@ -222,8 +227,13 @@ void fx25_send_packet(uint8_t buf[], int size, int wait, int tnc_mode)
     ESP_LOGI(TAG, "fx25_send_packet(): tnc_mode=%d, ax25=%d, parity=%d", tnc_mode, ax25, parity);
 
     if (buf == NULL) return;;
-    if (size <= 0) return;
+    if (size < MIN_PKT_SIZE) return;
     if (size > MAX_PKT_SIZE) return;
+
+#ifdef CONFIG_TNC_STATISTICS
+    // save source callsgin
+    memcpy(source_callsign, &buf[7], 7);
+#endif
 
     memcpy(ax25_buf, buf, size);
     len = size;

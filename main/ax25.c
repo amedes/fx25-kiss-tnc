@@ -2,6 +2,8 @@
  * AX.25 related routine
  */
 #include <stdio.h>
+#include <string.h>
+#include <ctype.h>
 #include <rom/crc.h>
 
 #include "ax25.h"
@@ -85,4 +87,50 @@ int ax25_count_bit_length(uint8_t packet[], int length)
   }
 
   return bit_length;
+}
+
+#define AX25_ADDR_LEN 7
+#define AX25_ADDR_SSID 6
+/*
+ * convert ASCII callsign to AX.25 address with SSID
+ */
+char *ax25_call_to_addr(const char *callsign)
+{
+    static char ax25_addr[AX25_ADDR_LEN];
+    int i;
+    int ssid;
+
+    if (callsign == NULL) return NULL;
+
+    memset(ax25_addr, ' ' << 1, AX25_ADDR_LEN - 1);
+    ax25_addr[AX25_ADDR_SSID] = 0x60; // SSID 0
+
+    for (i = 0; i < AX25_ADDR_SSID; i++) {
+	char c = toupper((int)callsign[i]);
+
+	if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) {
+	    ax25_addr[i] = c << 1;
+	} else {
+	    break;
+	}
+    }
+
+    // SSID
+    if (callsign[i] == '-') {
+	int c = callsign[++i];
+
+	if (c >= '1' && c <= '9') {
+	    ssid = c - '0';
+	    if (ssid == 1) {
+		c = callsign[++i];
+		if (c >= '0' && c <= '5') {
+		    ssid *= 10;
+		    ssid += c - '0';
+		}
+	    }
+	    ax25_addr[AX25_ADDR_SSID] |= ssid << 1;
+	}
+    }
+
+    return ax25_addr;
 }

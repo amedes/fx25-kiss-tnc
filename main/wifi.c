@@ -87,9 +87,11 @@ static esp_err_t event_handler(void *ctx, system_event_t *event)
                 s_retry_num++;
                 ESP_LOGI(TAG,"retry to connect to the AP");
             } else {
+#if 0
 		ESP_ERROR_CHECK(esp_wifi_wps_enable(&config));
 		ESP_ERROR_CHECK(esp_wifi_wps_start(0));
 		ESP_LOGI(TAG, "retry to wps...");
+#endif
                 s_retry_num = 0;
 	    }
             break;
