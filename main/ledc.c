@@ -1,7 +1,6 @@
 /*
  * generate 4.4336MHz clock for TCM3105
  */
-#ifdef CONFIG_ESP_LEDC
 #include "driver/ledc.h"
 #include "driver/gpio.h"
 #include "esp_err.h"
@@ -52,4 +51,3 @@ void ledc_init(void)
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel)); // CLK for TRS
 #endif
 }
-#endif

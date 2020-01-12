@@ -1314,7 +1314,7 @@ void app_main()
 #endif
 
 #ifdef CONFIG_ESP_LEDC
-    ledc_init(); // clocl for TCM3105
+    ledc_init(); // clock for TCM3105
 #endif
 
 #ifdef USE_WIFI
