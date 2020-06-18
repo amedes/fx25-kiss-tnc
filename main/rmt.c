@@ -16,6 +16,12 @@
 #include "driver/rmt.h"
 #include "esp_system.h"
 
+#ifdef __has_include
+#if __has_include("esp_idf_version.h")
+#include "esp_idf_version.h"
+#endif
+#endif
+
 #include "config.h"
 #include "rmt.h"
 #include "gpio.h"
@@ -261,7 +267,15 @@ static void rmt_send_task(void *p)
 
 		// check queue
 		UBaseType_t items;
+#ifdef ESP_IDF_VERSION
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(4, 0, 0)
+		vRingbufferGetInfo(rb, NULL, NULL, NULL, NULL, &items);
+#else
 		vRingbufferGetInfo(rb, NULL, NULL, NULL, &items);
+#endif
+#else
+		vRingbufferGetInfo(rb, NULL, NULL, NULL, &items);
+#endif
 		if (items <= 0) break; // exit if no queued frame
 
 		// read next frame
