@@ -56,93 +56,25 @@ int cap_queue_err = 0;
 static void IRAM_ATTR mcpwm_isr_handler()
 {
     uint32_t mcpwm_intr_status;
-    uint32_t ts0, ts1;
-    //static uint32_t ts0 = 0;
-    //capture evt;
-    //static uint32_t ts = 0;
+    uint32_t ts0;
+    uint32_t edge;
+    BaseType_t taskWoken = pdFALSE;
 
     mcpwm_intr_status = MCPWM[MCPWM_UNIT_0]->int_st.val; //Read interrupt status
 
-    switch (mcpwm_intr_status & (CAP0_INT_EN | CAP1_INT_EN)) {
-	case CAP0_INT_EN:
-	    ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	    ts0 &= (~1); // clear LSB for indicate positive edge
-	    //ts0 |= 1; // clear LSB for indicate positive edge
-	    if (xQueueSendFromISR(cap_queue, &ts0, NULL) != pdTRUE) cap_queue_err++;
-	    //ts = ts0;
-	    break;
-
-	case CAP1_INT_EN:
-	    ts1 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP1);
-	    ts1 |= 1; // set LSB for indicate negative edge
-	    //ts1 &= ~1; // set LSB for indicate negative edge
-	    if (xQueueSendFromISR(cap_queue, &ts1, NULL) != pdTRUE) cap_queue_err++;
-	    //ts = ts1;
-	    break;
-
-#if 0
-	    // both int occur in very short time, may be...
-	case CAP0_INT_EN | CAP1_INT_EN:
-	    ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	    ts0 &= (~1); // clear LSB for indicate positive edge
-	    ts1 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP1);
-	    ts1 |= 1; // set LSB for indicate negative edge
-	    if (ts & 1) {
-	      if (xQueueSendFromISR(cap_queue, &ts0, NULL) != pdTRUE) cap_queue_err++;
-	      if (xQueueSendFromISR(cap_queue, &ts1, NULL) != pdTRUE) cap_queue_err++;
-	    } else {
-	      if (xQueueSendFromISR(cap_queue, &ts1, NULL) != pdTRUE) cap_queue_err++;
-	      if (xQueueSendFromISR(cap_queue, &ts0, NULL) != pdTRUE) cap_queue_err++;
-	    }
-	    break;
-#endif
-
-#if 0
-	case CAP0_INT_EN | CAP1_INT_EN:
-	    ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	    ts1 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP1);
-
-	    if (ts0 - ts1 < 100) break;
-	    if (ts1 - ts0 < 100) break;
-	      if (xQueueSendFromISR(cap_queue, &ts1, NULL) != pdTRUE) cap_queue_err++;
-	      if (xQueueSendFromISR(cap_queue, &ts0, NULL) != pdTRUE) cap_queue_err++;
-	    } else if (ts1 - ts0 > 100) {
-	      if (xQueueSendFromISR(cap_queue, &ts0, NULL) != pdTRUE) cap_queue_err++;
-	      if (xQueueSendFromISR(cap_queue, &ts1, NULL) != pdTRUE) cap_queue_err++;
-	    }
-#endif
-    }
-
-#if 0
-#if 1
-    if (mcpwm_intr_status & CAP0_INT_EN) { //Check for interrupt on rising edge on CAP0 signal
+    if (mcpwm_intr_status & CAP0_INT_EN) {
 	ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	//if (ts - ts0 > TIME_HALF_BIT) { // ignore short edge
-	    //ts &= (~1); // clear LSB for indicate positive edge
-	  //  if (xQueueSendFromISR(cap_queue, &ts, NULL) != pdTRUE) cap_queue_err++;
-	//    ts0 = ts; // save time
-	//}
+	edge = mcpwm_capture_signal_get_edge(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
+	ts0 &= (~1); // clear LSB for indicate positive or negative edge
+	ts0 |= (edge >> 1) & 1; // edge: 1 - positive edge, 2 - negative edge
+	if (xQueueSendFromISR(cap_queue, &ts0, &taskWoken) != pdTRUE) cap_queue_err++;
     }
-
-    if (mcpwm_intr_status & CAP1_INT_EN) { //Check for interrupt on falling edge on CAP1 signal
-	ts1 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP1);
-	//if (ts - ts0 > TIME_HALF_BIT) { // ignore short edge
-	    //ts |= 1; // set LSB for indicate negative edge
-	   // if (xQueueSendFromISR(cap_queue, &ts, NULL) != pdTRUE) cap_queue_err++;
-	//    ts0 = ts; // save time
-	//}
-    }
-#else
-
-    if (mcpwm_intr_status & (CAP0_INT_EN | CAP1_INT_EN)) { //Check for interrupt on rising edge on CAP0 signal
-	ts = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	if (xQueueSendFromISR(cap_queue, &ts, NULL) != pdTRUE) cap_queue_err++;
-    }
-
-#endif
-#endif
 
     MCPWM[MCPWM_UNIT_0]->int_clr.val = mcpwm_intr_status;
+
+    if (taskWoken) {
+	portYIELD_FROM_ISR();
+    }
 }
 
 void mcpwm_initialize(xQueueHandle queue)
@@ -173,14 +105,17 @@ void mcpwm_initialize(xQueueHandle queue)
     ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM_CAP_0, GPIO_CAP0_IN));
     ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM_CAP_1, GPIO_CAP1_IN));
 
-#define CAP_PRESCALE (0) // prescale 1/(value + 1)
+#define CAP_PRESCALE (0) // prescale value is 1
 
-    // use two capture channel to detect both positive and negative edge
+    // enable capture module
     ESP_ERROR_CHECK(mcpwm_capture_enable(MCPWM_UNIT_0, MCPWM_SELECT_CAP0, MCPWM_POS_EDGE, CAP_PRESCALE));
-    ESP_ERROR_CHECK(mcpwm_capture_enable(MCPWM_UNIT_0, MCPWM_SELECT_CAP1, MCPWM_NEG_EDGE, CAP_PRESCALE));
+    //ESP_ERROR_CHECK(mcpwm_capture_enable(MCPWM_UNIT_0, MCPWM_SELECT_CAP1, MCPWM_NEG_EDGE, CAP_PRESCALE));
+ 
+    // detect both positive and negative edge
+    MCPWM[MCPWM_UNIT_0]->cap_cfg_ch[0].mode = BIT(0) | BIT(1); 
 
     // enable interrupt
-    MCPWM[MCPWM_UNIT_0]->int_ena.val = CAP0_INT_EN | CAP1_INT_EN;
+    MCPWM[MCPWM_UNIT_0]->int_ena.val = CAP0_INT_EN;
 
 #define ESP_INTR_FLAG_DEFAULT (0)
 
