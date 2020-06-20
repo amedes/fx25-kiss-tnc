@@ -15,6 +15,7 @@
 #include "esp_log.h"
 #include "driver/rmt.h"
 #include "esp_system.h"
+#include "esp_log.h"
 
 #ifdef __has_include
 #if __has_include("esp_idf_version.h")
@@ -27,17 +28,17 @@
 #include "gpio.h"
 #include "tx_cntl.h"
 
-#define BAUD 1200
+//#define BAUD 1200
 
 #define RMT_TX_CHANNEL RMT_CHANNEL_0
-#define RMT_TX_GPIO	GPIO_TXD_PIN	// TXD to TCM3015
+#define RMT_TX_GPIO	GPIO_TXD_PIN	// TXD to TCM3105
 //#define RMT_TX_GPIO 14
 
 #define RMT_RX_CHANNEL RMT_CHANNEL_1
 #define RMT_RX_GPIO 14
 
 //#define RMT_CLK_DIV (80)
-#define RMT_CLK_DIV (3)
+//#define RMT_CLK_DIV (3)
 #define RMT_DURATION ((80*1000*1000 / RMT_CLK_DIV + BAUD/2) / BAUD) // 1200bps
 
 #define RMT_TAG "RMT"
@@ -73,6 +74,55 @@ static int noise(int level)
 }
 #endif
 
+static int gcd(int x, int y)
+{
+    int a, b, r;
+
+    if (x <= 0 || y <= 0) return -1;
+
+    if (x < y) {
+	a = x;
+	b = y;
+    } else {
+	a = y;
+	b = x;
+    }
+
+    // Euclidean mutual division method
+    while (1) {
+	r = b % a;
+
+	if (r == 0) break;
+
+	b = a;
+	a = r;
+    }
+
+    return a;
+}
+
+static int rmt_div;
+static int rmt_bit_apb_clocks;
+
+#define APB_CLK		(80 * 1000 * 1000)
+#define RMT_DURATION_MAX 32767
+#define RMT_CLK_DIV	((APB_CLK + (BAUD * RMT_DURATION_MAX - 1)) / (BAUD * RMT_DURATION_MAX))
+
+static void copy_to_rmt_init(void)
+{
+    int d = gcd(APB_CLK, BAUD * RMT_CLK_DIV);
+
+    if (d <= 0) {
+	ESP_LOGE(RMT_TAG, "gcd(%d, %d) = %d", APB_CLK, BAUD * RMT_CLK_DIV, d);
+	abort();
+    }
+
+    rmt_bit_apb_clocks = APB_CLK / d;
+    rmt_div = BAUD * RMT_CLK_DIV / d;
+
+    ESP_LOGI(RMT_TAG, "rmt_bit_apb_clocks: %d, rmt_div: %d", rmt_bit_apb_clocks, rmt_div);
+}
+
 /*
  * copy packet data to rmt hardware with NRZI conversion
  */
@@ -80,6 +130,7 @@ static void IRAM_ATTR copy_to_rmt(const void *src, rmt_item32_t *dest, size_t sr
 		size_t wanted_num, size_t *translated_size, size_t *item_num)
 {
     static int level = 1; // save level
+    static int rem = RMT_CLK_DIV / 2; // DDA remainder
 
     //ESP_LOGI(RMT_TAG, "src_size = %d, wanted_num = %d", src_size, wanted_num);
 
@@ -93,57 +144,30 @@ static void IRAM_ATTR copy_to_rmt(const void *src, rmt_item32_t *dest, size_t sr
     size_t size = 0;
     size_t num = 0;
     uint8_t *psrc = (uint8_t *)src;
-    rmt_item32_t *pdest = dest;
-
-#define RMT_DURATION_MAX 32767
-#if RMT_CLK_DIV == 3
-#define BIT_TIME 22222
-#define BIT_CYCLE 9
-#else
-#define BIT_TIME 833
-#define BIT_CYCLE 3
-#endif
-#define BIT_TIME1 (BIT_TIME+1)
-
-    //rmt_item32_t rmt_item = {{{ BIT_TIME, 0, BIT_TIME, 0 }}};
-#if RMT_CLK_DIV == 3
-    static const uint16_t bit_time[BIT_CYCLE] = {
-	    BIT_TIME1, BIT_TIME, BIT_TIME, BIT_TIME,
-	    BIT_TIME1, BIT_TIME, BIT_TIME, BIT_TIME, BIT_TIME,
-    };
-#else
-    static const uint16_t bit_time[BIT_CYCLE] = { BIT_TIME1, BIT_TIME, BIT_TIME };
-#endif
-    int cnt = 0;
+    rmt_item16_t *pdest = (rmt_item16_t *)dest;
 
     while ((size < src_size) && (num < wanted_num)) {
-	for (int m = *psrc | 0x100; m >= 4; m >>= 2) { // 0x100 is sentinel
+	for (int m = *psrc++ | 0x100; m >= 2; m >>= 1) { // 0x100 is sentinel
 
-	    // process 2 bits at once
-	    pdest->duration0 = bit_time[cnt++]; cnt %= BIT_CYCLE;
+	    // calculate one bit duration used by DDA method
+	    pdest->duration = (rmt_bit_apb_clocks - rem + (rmt_div - 1)) / rmt_div;
+	    rem += pdest->duration * rmt_div - rmt_bit_apb_clocks;
+
 	    if ((m & 1) == 0) level = !level; // NRZI
 #ifdef CONFIG_TNC_DEMO_MODE
-	    pdest->level0 = noise(level);
+	    pdest->level = noise(level);
 #else
-	    pdest->level0 = level;
-#endif
-
-	    pdest->duration1 = bit_time[cnt++]; cnt %= BIT_CYCLE;
-	    if ((m & 2) == 0) level = !level; // NRZI
-#ifdef CONFIG_TNC_DEMO_MODE
-	    pdest->level1 = noise(level);
-#else
-	    pdest->level1 = level;
+	    pdest->level = level;
 #endif
 	    pdest++;
-	    num++;
 	}
+	num += 4;
 	size++;
-	psrc++;
     }
 
     if (size >= src_size) { // all src processed
-	level = 1; // reset value
+	level = 1; // reset level
+	rem = RMT_CLK_DIV / 2; // reset remainder
     }
 
     *translated_size = size;
@@ -331,11 +355,12 @@ void rmt_tx_init(void)
     };
     ESP_ERROR_CHECK(rmt_config(&config));
     ESP_ERROR_CHECK(rmt_driver_install(config.channel, 0, 0));
+    copy_to_rmt_init(); // initialize variables used in copy_to_rmt()
     ESP_ERROR_CHECK(rmt_translator_init(config.channel, copy_to_rmt));
 
     rmt_ringbuf = xRingbufferCreate(RMT_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
     if (rmt_ringbuf == NULL) {
-	ESP_LOGD(RMT_TAG, "xRingbufferCreate() fail");
+	ESP_LOGI(RMT_TAG, "xRingbufferCreate() fail");
 	abort();
     }
 

@@ -77,6 +77,14 @@ static void IRAM_ATTR mcpwm_isr_handler()
     }
 }
 
+static void isr_register_task(void *p)
+{
+    // register ISR handler
+    ESP_ERROR_CHECK(mcpwm_isr_register(MCPWM_UNIT_0, mcpwm_isr_handler, NULL, ESP_INTR_FLAG_IRAM, NULL));
+
+    vTaskDelete(NULL);
+}
+
 void mcpwm_initialize(xQueueHandle queue)
 {
 #ifdef CONFIG_ESP_CLK_TRS
@@ -103,7 +111,7 @@ void mcpwm_initialize(xQueueHandle queue)
     cap_queue = queue;
 
     ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM_CAP_0, GPIO_CAP0_IN));
-    ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM_CAP_1, GPIO_CAP1_IN));
+    //ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM_CAP_1, GPIO_CAP1_IN));
 
 #define CAP_PRESCALE (0) // prescale value is 1
 
@@ -120,5 +128,11 @@ void mcpwm_initialize(xQueueHandle queue)
 #define ESP_INTR_FLAG_DEFAULT (0)
 
     // register ISR handler
-    ESP_ERROR_CHECK(mcpwm_isr_register(MCPWM_UNIT_0, mcpwm_isr_handler, NULL, ESP_INTR_FLAG_DEFAULT, NULL));
+    //ESP_ERROR_CHECK(mcpwm_isr_register(MCPWM_UNIT_0, mcpwm_isr_handler, NULL, ESP_INTR_FLAG_IRAM, NULL));
+ 
+    TaskHandle_t task;
+    if (xTaskCreatePinnedToCore(isr_register_task, "isr_register_task", 2048, NULL, tskIDLE_PRIORITY, &task, 1) != pdPASS) {
+	ESP_LOGE(TAG, "xTaskCreatePinnedToCore() fail");
+	abort();
+    }
 }

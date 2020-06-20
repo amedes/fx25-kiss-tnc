@@ -20,6 +20,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 
+#include "config.h"
 #include "rmt.h"
 #include "gpio.h"
 #include "mcpwm.h"
@@ -54,7 +55,7 @@
 //#define FX25_DATA_SIZE (4 + 8 + 255 + 1) // pre + tag + rs + post
 #define PARITY_SYMBOLS 16 // len of parity
 
-#define BIT_TIME ((80000000 + 600) / 1200) // APB clock 80MHz, 1200bps
+#define BIT_TIME ((80000000 + BAUD/2) / BAUD) // APB clock 80MHz, 1200bps
 #define BIT_TIME2 (BIT_TIME / 2)
 
 #define FX25_BUF_SIZE (4 + 8 + 255*5 + 1) // maximum FX.25 packet size, first byte is type indicator

@@ -6,6 +6,8 @@
 
 #include "sdkconfig.h"
 
+#define BAUD (1200)
+
 // KISS default parameter
 #define TXDELAY CONFIG_KISS_TXDELAY
 #define P	CONFIG_KISS_P
