@@ -380,5 +380,5 @@ void rmt_tx_init(void)
     //an_seed = tv.tv_usec;
 #endif
 
-    xTaskCreate(rmt_send_task, "rmt_send_task", 2048, rmt_ringbuf, 12, NULL);
+    configASSERT(xTaskCreatePinnedToCore(rmt_send_task, "rmt_send_task", 2048, rmt_ringbuf, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) == pdPASS);
 }

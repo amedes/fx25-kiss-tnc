@@ -339,7 +339,7 @@ void tcp_reader_task(void *p)
 
 	// register ringbuf
 	if (uart_add_ringbuf(rc.ringbuf)) {
-	    if (xTaskCreate(tcp_writer_task, "tcp_write", 1024*4, &rc, tskIDLE_PRIORITY, &tcp_writer) == pdPASS) {
+	    if (xTaskCreatePinnedToCore(tcp_writer_task, "tcp_write", 1024*4, &rc, tskIDLE_PRIORITY+1, &tcp_writer, tskNO_AFFINITY) == pdPASS) {
 		tcp_client(newconn);
 		ESP_LOGI(TAG, "tcp_client() returned");
 		vTaskDelete(tcp_writer); // stop writer task
@@ -383,7 +383,7 @@ static void wifi_task(void *p)
 	    if (xErr != ERR_OK) continue;
 
 	    // create tcp reader task
-	    if (xTaskCreate(tcp_reader_task, "tcp_read", 1024*4, newconn, tskIDLE_PRIORITY, &tcp_reader) != pdTRUE) {
+	    if (xTaskCreatePinnedToCore(tcp_reader_task, "tcp_read", 1024*4, newconn, tskIDLE_PRIORITY+1, &tcp_reader, tskNO_AFFINITY) != pdTRUE) {
 		ESP_LOGD(TAG, "xTaskCreate(tcp_reader_task) fail\n");
 	    }
 #if 0
@@ -526,7 +526,7 @@ void wifi_start(void)
     wifi_init_sta();
 #else
     softap_init();
-    xTaskCreate(http_task, "http_task", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    configASSERT(xTaskCreatePinnedToCore(http_task, "http_task", 4096, NULL, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) == pdPASS);
 #endif
-    xTaskCreate(wifi_task, "wifi_task", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    configASSERT(xTaskCreatePinnedToCore(wifi_task, "wifi_task", 4096, NULL, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) == pdPASS);
 }

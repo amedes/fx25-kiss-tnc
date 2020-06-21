@@ -1332,14 +1332,14 @@ void app_main()
     fx25tag_init(); // generate FX.25 PN tags 
 
     // receiver task
-    rc = xTaskCreate(rx_task, "rx_task", 1024*4, &capqueue, tskIDLE_PRIORITY, &xHandle);
+    rc = xTaskCreatePinnedToCore(rx_task, "rx_task", 1024*4, &capqueue, tskIDLE_PRIORITY+1, &xHandle, tskNO_AFFINITY);
     if (rc != pdPASS) {
 	return;
     }
 
 #ifdef CONFIG_TNC_BEACON 
     // transmitter task
-    rc = xTaskCreate(tx_task, "tx_task", 1024*4, NULL, tskIDLE_PRIORITY, &tx_task_handle);
+    rc = xTaskCreatePinnedToCore(tx_task, "tx_task", 1024*4, NULL, tskIDLE_PRIORITY+1, &tx_task_handle, tskNO_AFFINITY);
     if (rc != pdPASS) {
 	return;
     }

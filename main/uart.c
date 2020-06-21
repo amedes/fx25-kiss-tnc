@@ -541,7 +541,7 @@ void uart_init(void)
     //uart_pattern_queue_reset(EX_UART_NUM, 20);
 
     //Create a task to handler UART event from ISR
-    if (xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL) != pdPASS) {
+    if (xTaskCreatePinnedToCore(uart_event_task, "uart_event_task", 2048, NULL, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) != pdPASS) {
 	ESP_LOGE(TAG, "uart_event_task creation fail");
 	abort();
     }
@@ -551,7 +551,7 @@ void uart_init(void)
 	ESP_LOGD(TAG, "can not allocate ring buffer");
 	abort();
     }
-    if (xTaskCreate(uart_send_task, "uart_send_task", 2048, uart0_ringbuf, 12, NULL) != pdPASS) {
+    if (xTaskCreatePinnedToCore(uart_send_task, "uart_send_task", 2048, uart0_ringbuf, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) != pdPASS) {
 	ESP_LOGE(TAG, "uart_send_task creation fail");
 	abort();
     }
