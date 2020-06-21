@@ -260,7 +260,7 @@ void fx25_send_aprsis(const char aprs_msg[])
 
     aprs_udp_msg[udp_msg_top] = '\0';
 
-    strncat(aprs_udp_msg, &aprs_msg[AX25_MSG_TOP], APRS_MSG_LEN);
+    strncat(aprs_udp_msg, &aprs_msg[AX25_MSG_TOP], APRS_MSG_LEN-1);
     ESP_LOGI(TAG, "aprs_udp_msg: %s", aprs_udp_msg);
 
     struct netconn *conn = NULL;
