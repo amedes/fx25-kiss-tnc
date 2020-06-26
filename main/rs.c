@@ -24,38 +24,6 @@ static poly_t rs_gen_p64; // generating polynomial for 64 parity
 #define GF_ELEMENTS 255
 
 /*
-  calculate generating polynamial
-
-  n is maximum dimension of generation polynomial.
-  return product((x - a^i), i, 0, n)
-*/
-int make_gp(poly_t *gp, int n)
-{
-  int i, j;
-
-  if (n >= POLY_SIZE) return -1; // too big
-
-  poly_clear(gp);
-  gp->coeff[0] = 1; // initialize
-
-  for (i = 0; i < n; i++) {
-    gf_t a = gf_pow(i);
-    gf_t b = 0;
-
-    for (j = 0; j <= i; j++) {
-      gf_t c = gp->coeff[j]; /* save value */
-
-      gp->coeff[j] = gf_sub(b, gf_mul(c, a)); /* a_i = a_i * a^i + a_i-1 */
-      b = c; /* carry next degree of x */
-    }
-    gp->coeff[j] = b; /* increase most significant degree */
-  }
-  gp->degree = n;
-
-  return 0;
-}
-
-/*
   make generating polynomial G_n(x)
   *
   * n: length of parity (16, 32, 64)
