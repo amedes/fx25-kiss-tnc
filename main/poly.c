@@ -98,11 +98,20 @@ int poly_div(
 
   if (poly_iszero(divisor)) return -1; // dvisor == 0
 
-  poly_copy(&dd, dividend);
-
   /* degree of quotient */
   int qi = dividend->degree - divisor->degree;
+
+  /* if quotient == 0 */
+  if (qi < 0) {
+      quotient->degree = 0;
+      quotient->coeff[0] = 0;
+      poly_copy(remainder, dividend);
+
+      return 0;
+  }
+
   quotient->degree = qi;
+  poly_copy(&dd, dividend);
 
   /* reciplocal number of most significant coefficient of divisor */
   gf_t d = divisor->coeff[divisor->degree];
