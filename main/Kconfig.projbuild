@@ -74,6 +74,13 @@ config KISS_FULLDUPLEX
     default n
     help
 	The default is half duplex.
+
+config RS_DIREWOLF_GP
+    bool "Reed-Solomon code compatibility for Direwolf software TNC"
+    default y
+    help
+	Old FX.25 KISS TNC was used different generator polynomial from Direwolf.
+	Now default behavior is compatible with Direwolf.
     
 config USE_WIFI
     bool "Enable WiFi"

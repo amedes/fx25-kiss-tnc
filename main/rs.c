@@ -45,7 +45,11 @@ static int make_genp(poly_t *gp, int n)
   xa.coeff[1] = 1;
 
   for (i = 0; i  < n; i++) {
-    an = gf_pow(i); /* a^i */
+#ifdef CONFIG_RS_DIREWOLF_GP
+    an = gf_pow(i + 1); /* a^(i + 1), use same generator polynomial as Direwolf for compatibility */
+#else
+    an = gf_pow(i); /* a^i, original FX.25 KISS TNC used this */
+#endif
     xa.coeff[0] = gf_neg(an); /* make (x - a^i) */
 
     poly_mul(gp, &xa, &tmp); /* G_i+i(x) = G_i(x) * (x - a^i) */

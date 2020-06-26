@@ -1304,6 +1304,12 @@ void app_main()
     esp_log_level_set("*", ESP_LOG_NONE);
 #endif
 
+#ifdef CONFIG_RS_DIREWOLF_GP
+    ESP_LOGI(TAG, "RS code Direwolf compatible mode");
+#else
+    ESP_LOGI(TAG, "RS code old FX.25 KISS TNC compatible mode");
+#endif
+
     capqueue = xQueueCreate(RXD_QUEUE_LEN, sizeof(uint32_t));
 
     mcpwm_initialize(capqueue); // capture RXD state
