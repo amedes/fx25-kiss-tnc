@@ -6,22 +6,51 @@
 uint64_t co_tag[CO_TAG_SIZE];
 
 tag_t tags[CO_TAG_SIZE] = {
-  { { .tag = 0 }, 0, 0 }, // Tag_00
-  { { .tag = 0 }, 255, 239 },
-  { { .tag = 0 }, 144, 128 },
-  { { .tag = 0 }, 80, 64 },
-  { { .tag = 0 }, 48, 32 }, // Tag_01 - Tag_04
-  { { .tag = 0 }, 255, 223 },
-  { { .tag = 0 }, 160, 128 },
-  { { .tag = 0 }, 96, 64 },
-  { { .tag = 0 }, 64, 32 }, // Tag_05 - Tag_08
-  { { .tag = 0 }, 255, 191 },
-  { { .tag = 0 }, 192, 128 },
-  { { .tag = 0 }, 128, 64 }, // Tag_09 - Tag_0B
-  { { .tag = 0 }, 255*2, 239*2 }, // Tag_0C - Tag_0F
-  { { .tag = 0 }, 255*3, 239*3 },
-  { { .tag = 0 }, 255*4, 239*4 },
-  { { .tag = 0 }, 255*5, 239*5 },
+  { { .tag = 0 }, 0, 0, 0, 0 }, // Tag_00
+  { { .tag = 0 }, 1, 1, 255, 239 }, 
+  { { .tag = 0 }, 1, 1, 144, 128 },
+  { { .tag = 0 }, 1, 1, 80, 64 },
+  { { .tag = 0 }, 1, 1, 48, 32 }, // Tag_01 - Tag_04
+  { { .tag = 0 }, 1, 1, 255, 223 },
+  { { .tag = 0 }, 1, 1, 160, 128 },
+  { { .tag = 0 }, 1, 1, 96, 64 },
+  { { .tag = 0 }, 1, 1, 64, 32 }, // Tag_05 - Tag_08
+  { { .tag = 0 }, 1, 1, 255, 191 },
+  { { .tag = 0 }, 1, 1, 192, 128 },
+  { { .tag = 0 }, 1, 1, 128, 64 }, // Tag_09 - Tag_0B
+
+  { { .tag = 0 }, 1, 2, 255, 239 }, // Tag_0C - Tag_0F
+  { { .tag = 0 }, 1, 2, 255, 223 },
+  { { .tag = 0 }, 1, 2, 255, 191 },
+  { { .tag = 0 }, 1, 3, 255, 191 }, 
+
+  { { .tag = 0 }, 0, 0, 256, 256 }, // Tag_10
+  { { .tag = 0 }, 2, 1, 256, 256 }, 
+  { { .tag = 0 }, 2, 2, 256, 256 }, 
+  { { .tag = 0 }, 2, 3, 256, 256 }, 
+  { { .tag = 0 }, 2, 4, 256, 256 }, 
+  { { .tag = 0 }, 2, 5, 256, 256 }, 
+  { { .tag = 0 }, 2, 6, 256, 256 }, 
+  { { .tag = 0 }, 2, 7, 256, 256 }, 
+  { { .tag = 0 }, 2, 8, 256, 256 }, 
+  { { .tag = 0 }, 2, 9, 256, 256 }, 
+  { { .tag = 0 }, 2,10, 256, 256 }, 
+  { { .tag = 0 }, 2,11, 256, 256 }, 
+  { { .tag = 0 }, 2,12, 256, 256 }, 
+  { { .tag = 0 }, 2,13, 256, 256 }, 
+  { { .tag = 0 }, 2,14, 256, 256 }, 
+  { { .tag = 0 }, 2,15, 256, 256 }, // Tag_1F
+  
+  { { .tag = 0 }, 3, 0, 0, 0 },     // Tag_20 CODE TAG BASE
+  { { .tag = 0 }, -1,0, 0, 0 },     // sentinel
+};
+
+tag_t code_tags[CODE_TAG_SIZE] = {
+  { { .tag = 0 }, 0, 0, 0, 0 },     // CODE_Tag_00 - Tag_03
+  { { .tag = 0 }, 3, 0, 255, 239 }, 
+  { { .tag = 0 }, 3, 0, 255, 223 },
+  { { .tag = 0 }, 3, 0, 255, 191 },
+  { { .tag = 0 }, -1,0, 0, 0 },     // sentinel
 };
 
 static uint64_t gold_code(uint8_t iseed, uint8_t qseed)
@@ -57,12 +86,25 @@ static uint64_t gold_code(uint8_t iseed, uint8_t qseed)
 
 int fx25tag_init(void)
 {
-  int i;
+  static int initialized = 0;
 
-  for (i = CO_TAG_00; i < CO_TAG_40; i++) {
-    tags[i].tag = gold_code(I_SEED, i);
+  if (initialized == 0) {
+    initialized = 1;
+    int i;
+
+    for (i = CO_TAG_00; i < CO_TAG_40; i++) {
+      tags[i].tag = gold_code(I_SEED, i);
+    }
+    tags[CO_TAG_40].tag = gold_code(0x00, 0x3f); // Tag_40
+
+    uint64_t code_tag = tags[CODE_TAG_BASE].tag;
+    for (i = 0; i < CODE_TAG_SIZE; i++) {
+      code_tags[i].tag = code_tag;
+      code_tag >>= 1;
+      code_tag |= (code_tag & 1) << 63;
+      code_tag &= 0xFFFFFFFFFFFFFFFE;
+    }
+
   }
-  tags[CO_TAG_40].tag = gold_code(0x00, 0x3f); // Tag_40
-  
   return 0;
 }

@@ -1315,7 +1315,7 @@ void app_main()
     mcpwm_initialize(capqueue); // capture RXD state
     gpio_init(); // LED reflect GPIO state (connect CDT or RXD)
     rmt_tx_init(); // send pulse train to modem (TXD)
-    fx25tag_init(); // generate FX25 tags
+ 
 #ifdef CONFIG_ESP_DAC
     dac_init();	// RXB and CDL
 #endif

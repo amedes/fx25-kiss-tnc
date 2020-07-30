@@ -54,9 +54,11 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
   int rs_info_byte;
   int index;
   int tag_no = 0;
+  int code_tag_no = 0;
   int i;
   uint8_t rs_buf[RS_CODE_SIZE];
   int offset;
+  int need_flame = 1;
 
 #if 0
   printf("fx25_encode(): buf[], info_len = %d\n", info_len);
@@ -66,29 +68,54 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
   printf("\n");
 #endif
 
-  //fx25tag_init();
+  //  fx25tag_init();
 
   // find suitable CO TAG based on data length
   for (i = CO_TAG_0B; i >= CO_TAG_01; --i) {
     if ((info_len <= tags[i].rs_info) && (parity == tags[i].rs_code - tags[i].rs_info)) {
       tag_no = i;
+      need_flame = 1;
+      rs_code_byte = tags[tag_no].rs_code;
+      rs_info_byte = tags[tag_no].rs_info;
       break;
     }
   }
 
-#define RS_INFO_SIZE 239
+// #define RS_INFO_SIZE 239
+// parity = FX25_PARITY_16;
 
-  // Nemoto extension
-  parity = FX25_PARITY_16; // now NX supports parity 16 only
+  // JH1FBM extension type 1
   if (tag_no == 0) {
     for (i = CO_TAG_0C; i <= CO_TAG_0F; i++) {
-      if (info_len <= tags[i].rs_info) {
+      if ((info_len <= tags[i].rs_info * tags[i].flame_number) 
+          && (parity == tags[i].rs_code - tags[i].rs_info)) {
         tag_no = i;
+        need_flame = tags[i].flame_number;
+        rs_code_byte = tags[tag_no].rs_code;
+        rs_info_byte = tags[tag_no].rs_info;
         break;
       }
     }
   }
 
+  // JH1FBM extension type 2
+  if (tag_no == 0) {
+    need_flame = info_len / (RS_CODE_SIZE - parity);
+    if (need_flame > 1 && need_flame < 16) {
+      tag_no = need_flame + CO_TAG_10;
+      for (i = CODE_TAG_01; i <= CODE_TAG_03; i++) {
+        if (parity == code_tags[i].rs_code - code_tags[i].rs_info) {
+          code_tag_no = i;
+          rs_code_byte = code_tags[code_tag_no].rs_code;
+          rs_info_byte = code_tags[code_tag_no].rs_info;
+        }
+      }
+      if (code_tag_no == 0) { // suitable CODE TAG not found
+        ESP_LOGI(TAG, "fx25_encode(): unmached parity : len=%d, parity=%d", info_len, parity);
+        return -1;
+      }
+    }
+  }
   //printf("fx25_encode(): tag_no = %02x\n", tag_no);
 
   if (tag_no == 0) { // suitable TAG not found
@@ -97,8 +124,6 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
     return -1;
   }
 
-  rs_code_byte = tags[tag_no].rs_code;
-  rs_info_byte = tags[tag_no].rs_info;
 
 #if 0
   if (rs_init(RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
@@ -130,59 +155,63 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
 
   if (tag_no <= CO_TAG_0B) { // FX.25 specification
 
-  // calculate RS parity
-  offset = RS_CODE_SIZE - rs_code_byte;
-  bzero(rs_buf, offset);
-  //bzero(rs_buf, RS_CODE_SIZE);
-  //memset(&rs_buf[offset], AX25_FLAG, rs_info_byte);
+    // calculate RS parity
+    offset = RS_CODE_SIZE - rs_code_byte;
+    bzero(rs_buf, offset);
+    //bzero(rs_buf, RS_CODE_SIZE);
+    //memset(&rs_buf[offset], AX25_FLAG, rs_info_byte);
 
-  // copy data to RS work
-  for (i = 0; i < info_len; i++) {
-    rs_buf[offset + i] = buf[i];
-  }
+    // copy data to RS work
+    for (i = 0; i < info_len; i++) {
+      rs_buf[offset + i] = buf[i];
+    }
 
-  // padding with AX25_FLAG
-  memset(&rs_buf[offset + info_len], AX25_FLAG, rs_info_byte - info_len);
+    // padding with AX25_FLAG
+    memset(&rs_buf[offset + info_len], AX25_FLAG, rs_info_byte - info_len);
 
-  // generate RS parity
-  if (rs_encode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
-    fprintf(stderr, "rs_encode error\n");
-    return -1;
-  }
+    // generate RS parity
+    if (rs_encode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
+      fprintf(stderr, "rs_encode error\n");
+      return -1;
+    }
 
 #if 0
-  printf("fx25_encode: rs_buf[], rs_code = %d, rs_info = %d, info_len = %d\n", rs_code_byte, rs_info_byte, info_len);
-  for (i = 0; i < RS_CODE_SIZE; i++) {
-	  printf("%02x ", rs_buf[i]);
-  }
-  printf("\n");
+    printf("fx25_encode: rs_buf[], rs_code = %d, rs_info = %d, info_len = %d\n", rs_code_byte, rs_info_byte, info_len);
+    for (i = 0; i < RS_CODE_SIZE; i++) {
+	    printf("%02x ", rs_buf[i]);
+    }
+    printf("\n");
 #endif
 
-  // copy RS code
-  for (i = 0; i < rs_code_byte; i++) {
-    fx25_data[index++] = rs_buf[offset + i];
-  }
+    // copy RS code
+    for (i = 0; i < rs_code_byte; i++) {
+      fx25_data[index++] = rs_buf[offset + i];
+    }
 
   } else {
-    // Nemoto extension
-    
-    int m = rs_code_byte / RS_CODE_SIZE; // multiplier m = 2, 3, 4
+    // JH1FBM extension
+    if (tag_no > CO_TAG_0F) {
+        // JH1FBM extension 2
+      for (i = 0;i < sizeof(tag); i++) {
+        fx25_data[index++] = code_tags[code_tag_no].byte[i];
+      }
+    }
+
+    int m = need_flame; // multiplier m = 2 ~
     for (int j = 0; j < m; j++) {
 
       // calculate RS parity
       //memset(&rs_buf[0], AX25_FLAG, RS_CODE_SIZE);
 
       // copy data to RS work
-      for (i = 0; i < RS_INFO_SIZE; i++) {
-	int index = i * m + j;
-
-	rs_buf[i] = (index < info_len) ? buf[index] : AX25_FLAG;
+      for (i = 0; i < rs_info_byte; i++) {
+	      rs_buf[i] = (i * m + j < info_len) ? buf[i * m + j] : AX25_FLAG;
       }
 
-      // generate RS parity, always RS(255, 239)
+      // generate RS parity
       if (rs_encode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
-	fprintf(stderr, "rs_encode error\n");
-	return -1;
+	      fprintf(stderr, "rs_encode error\n");
+	      return -1;
       }
 
       // copy RS code
@@ -190,8 +219,6 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
         fx25_data[i * m + j + index] = rs_buf[i];
       }
     }
-
-    index += rs_code_byte; 
   }
 
   // postamble
@@ -202,11 +229,11 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
   return index;
 }
 
-#define MAX_PKT_SIZE 1024
+#define MAX_PKT_SIZE 2048
 #define MIN_PKT_SIZE (7 + 7 + 1 + 1)
 #define AX25_BUF_SIZE (MAX_PKT_SIZE + 2)
-#define BITS_BUF_SIZE 1195
-#define FX25_BUF_SIZE (4 + 8 + 255*5 + 1)
+#define BITS_BUF_SIZE 2456
+#define FX25_BUF_SIZE (4 + 8*2 + 256*15 + 2)
 
 #ifdef CONFIG_TNC_STATISTICS
 uint8_t source_callsign[7] = { 'N' << 1, 'O' << 1, 'C' << 1, 'A' << 1, 'L' << 1, 'L' << 1, 0 };
@@ -245,7 +272,7 @@ void fx25_send_packet(uint8_t buf[], int size, int wait, int tnc_mode)
     bits_len = bitstuff_encode(bits_buf, BITS_BUF_SIZE, ax25_buf, len);
 
     if (ax25) {
-	send_packet(bits_buf, bits_len, wait); // send AX.25 packet
+	      send_packet(bits_buf, bits_len, wait); // send AX.25 packet
     } else {
 	// send FX.25 packet
         fx25_len = fx25_encode(fx25_buf, FX25_BUF_SIZE, bits_buf, bits_len, parity);
