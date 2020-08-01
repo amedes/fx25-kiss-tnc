@@ -50,8 +50,8 @@ union CO_TAG {
 
 int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int info_len, int parity)
 {
-  int rs_code_byte;
-  int rs_info_byte;
+  int rs_code_byte = 0;
+  int rs_info_byte = 0;
   int index;
   int tag_no = 0;
   int code_tag_no = 0;

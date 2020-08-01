@@ -311,7 +311,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 				code_tag_no = fx25_match_2nd_tag(&fx25tag, level);
 				if (code_tag_no <= -2) {
 					// never match code tag
-					ESP_LOGI(TAG, "2nd tag code never matched: %x", fx25tag);
+					ESP_LOGI(TAG, "2nd tag code never matched: %016llx", fx25tag);
 					state = STATE_SEARCH_TAG;
 				} else if (code_tag_no > 0) { 
 					// correlation code_tag found
@@ -582,7 +582,6 @@ int fx25_decode_bit(int level, uint8_t fx25_buf[], int fx25_buf_size)
 
 				//printf("fx25_decode_bit(): tag: bit_offset = %d\n", bit_offset);
 				bit_offset = 0;
-				tag_t *tp = &tags[tag_no];
 				//printf("fx25_decode_bit(): found fx25 tag: %02x, (%d, %d), %d\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info, codeblock_bits);
 			}
 
