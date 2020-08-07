@@ -34,14 +34,14 @@
 #define CODE_TAG_BASE 0x20
 
 typedef struct {
-  union {
-    uint64_t tag;
-    uint8_t byte[sizeof(uint64_t)];
-  };
-  int pn_type;
-  int flame_number;
-  int rs_code;
-  int rs_info;
+    union {
+        uint64_t tag;
+        uint8_t byte[sizeof(uint64_t)];
+    };
+    int pn_type;
+    int flame_number;
+    int rs_code;
+    int rs_info;
 } tag_t;
 
 extern tag_t tags[CO_TAG_SIZE];

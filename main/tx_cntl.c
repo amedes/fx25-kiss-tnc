@@ -65,7 +65,7 @@ void wait_carrier_inactive(void)
 {
     while (!fullduplex) {
         if (!gpio_get_level(GPIO_CDT_PIN)) return;
-	vTaskDelay(WAIT_CDT_TIME);
+        vTaskDelay(WAIT_CDT_TIME);
     }
 }
 
@@ -128,24 +128,25 @@ void set_sethardware(int ch, uint8_t buf[], int size)
 
     cmd = buf[0];
     switch (cmd) {
-	case FX25_SETMODE:
-	    if (size >= 2) {
-		param = buf[1];
-	    	switch (param) {
-		case  0:
-		   tnc_mode = AX25_MODE;	// AX.25 mode
-		   break;
-		case 16:
-		   tnc_mode = FX25_PARITY_16;// FX.25 mode, parity 16
-		   break;
-		case 32:
-		   tnc_mode = FX25_PARITY_32;// FX.25 mode, parity 32
-		   break;
-		case 64:
-		   tnc_mode = FX25_PARITY_64;// FX.25 mode, parity 64
-		   break;
-		}
-	    }
+        case FX25_SETMODE:
+            if (size >= 2) {
+                param = buf[1];
+                switch (param) {
+                    case  0:
+                        tnc_mode = AX25_MODE;	// AX.25 mode
+                        break;
+                    case 16:
+                        tnc_mode = FX25_PARITY_16;// FX.25 mode, parity 16
+                        break;
+                    case 32:
+                        tnc_mode = FX25_PARITY_32;// FX.25 mode, parity 32
+                        break;
+                    case 64:
+                        tnc_mode = FX25_PARITY_64;// FX.25 mode, parity 64
+                        break;
+                }
+            }
+            break;
     }
 
     ESP_LOGI(TAG, "sethardware: ch: %x, size: %d", ch, size);

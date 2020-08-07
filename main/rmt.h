@@ -3,8 +3,8 @@
 #if 1
 typedef union {
     struct {
-	uint16_t duration :15;
-	uint16_t level :1;
+        uint16_t duration :15;
+        uint16_t level :1;
     };
     uint16_t val;
 } rmt_item16_t;

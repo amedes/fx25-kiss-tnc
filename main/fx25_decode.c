@@ -495,6 +495,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 					state = STATE_SEARCH_TAG;
 					fx25tag = 0;
 				}
+				break;
     	}
 
 		level = 1;

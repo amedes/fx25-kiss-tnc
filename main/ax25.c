@@ -64,29 +64,27 @@ int ax25_fcs_check(uint8_t buf[], int len)
  */
 int ax25_count_bit_length(uint8_t packet[], int length)
 {
-  int bit_offset = 0;
-  int bit_length;
-  int data_bit;
-  int bit1_len;
+    int bit_offset = 0;
+    int bit_length = 0;
+    int data_bit;
+    int bit1_len = 0;
 
-  bit_length = 0;
-  bit1_len = 0;
-  for (bit_offset = 0; bit_offset < length * 8; bit_offset++) {
-    data_bit = (packet[bit_offset / 8] >> bit_offset % 8) & 1;
-    bit_length++;
+    for (bit_offset = 0; bit_offset < length * 8; bit_offset++) {
+        data_bit = (packet[bit_offset / 8] >> bit_offset % 8) & 1;
+        bit_length++;
 
-    /* count countinuous '1' */
-    if (data_bit) { // '1'
-      if (++bit1_len >= 5) { // need bit stuffing
-	bit_length++;
-	bit1_len = 0;
-      }
-    } else { // '0'
-      bit1_len = 0;
+        /* count countinuous '1' */
+        if (data_bit) { // '1'
+            if (++bit1_len >= 5) { // need bit stuffing
+                bit_length++;
+                bit1_len = 0;
+            }
+        } else { // '0'
+            bit1_len = 0;
+        }
     }
-  }
 
-  return bit_length;
+    return bit_length;
 }
 
 #define AX25_ADDR_LEN 7
@@ -108,28 +106,28 @@ char *ax25_call_to_addr(const char *callsign)
     for (i = 0; i < AX25_ADDR_SSID; i++) {
 	char c = toupper((int)callsign[i]);
 
-	if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) {
-	    ax25_addr[i] = c << 1;
-	} else {
-	    break;
-	}
+	    if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')) {
+	        ax25_addr[i] = c << 1;
+	    } else {
+	        break;
+	    }
     }
 
     // SSID
     if (callsign[i] == '-') {
-	int c = callsign[++i];
+	    int c = callsign[++i];
 
-	if (c >= '1' && c <= '9') {
-	    ssid = c - '0';
-	    if (ssid == 1) {
-		c = callsign[++i];
-		if (c >= '0' && c <= '5') {
-		    ssid *= 10;
-		    ssid += c - '0';
-		}
+	    if (c >= '1' && c <= '9') {
+	        ssid = c - '0';
+	        if (ssid == 1) {
+		        c = callsign[++i];
+		        if (c >= '0' && c <= '5') {
+		            ssid *= 10;
+		            ssid += c - '0';
+		        }
+	        }
+	        ax25_addr[AX25_ADDR_SSID] |= ssid << 1;
 	    }
-	    ax25_addr[AX25_ADDR_SSID] |= ssid << 1;
-	}
     }
 
     return ax25_addr;

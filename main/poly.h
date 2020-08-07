@@ -9,8 +9,8 @@
 #define POLY_SIZE GF_ORDER /* Maximum number of coefficients */
 
 typedef struct POLY {
-  int degree;
-  gf_t coeff[POLY_SIZE];
+    int degree;
+    gf_t coeff[POLY_SIZE];
 } poly_t;
 
 /*
@@ -52,11 +52,11 @@ int poly_iszero(poly_t *poly);
     remainder = dividend % dvisor
 */
 int poly_div(
-	     poly_t *dividend,
-	     poly_t *divisor,
-	     poly_t *quotient,
-	     poly_t *remainder
-	     );
+    poly_t *dividend,
+	  poly_t *divisor,
+	  poly_t *quotient,
+	  poly_t *remainder
+);
 
 
 /*

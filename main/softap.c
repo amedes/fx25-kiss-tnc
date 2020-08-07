@@ -42,18 +42,18 @@ static const char *TAG = "wifi softAP";
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
-    case SYSTEM_EVENT_AP_STACONNECTED:
-        ESP_LOGI(TAG, "station:"MACSTR" join, AID=%d",
-                 MAC2STR(event->event_info.sta_connected.mac),
-                 event->event_info.sta_connected.aid);
-        break;
-    case SYSTEM_EVENT_AP_STADISCONNECTED:
-        ESP_LOGI(TAG, "station:"MACSTR"leave, AID=%d",
-                 MAC2STR(event->event_info.sta_disconnected.mac),
-                 event->event_info.sta_disconnected.aid);
-        break;
-    default:
-        break;
+        case SYSTEM_EVENT_AP_STACONNECTED:
+            ESP_LOGI(TAG, "station:"MACSTR" join, AID=%d",
+                    MAC2STR(event->event_info.sta_connected.mac),
+                    event->event_info.sta_connected.aid);
+            break;
+        case SYSTEM_EVENT_AP_STADISCONNECTED:
+            ESP_LOGI(TAG, "station:"MACSTR"leave, AID=%d",
+                    MAC2STR(event->event_info.sta_disconnected.mac),
+                    event->event_info.sta_disconnected.aid);
+            break;
+        default:
+            break;
     }
     return ESP_OK;
 }
@@ -93,8 +93,8 @@ void softap_init(void)
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
     

@@ -63,17 +63,17 @@ static void IRAM_ATTR mcpwm_isr_handler()
     mcpwm_intr_status = MCPWM[MCPWM_UNIT_0]->int_st.val; //Read interrupt status
 
     if (mcpwm_intr_status & CAP0_INT_EN) {
-	ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	edge = mcpwm_capture_signal_get_edge(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
-	ts0 &= (~1); // clear LSB for indicate positive or negative edge
-	ts0 |= (edge >> 1) & 1; // edge: 1 - positive edge, 2 - negative edge
-	if (xQueueSendFromISR(cap_queue, &ts0, &taskWoken) != pdTRUE) cap_queue_err++;
+        ts0 = mcpwm_capture_signal_get_value(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
+        edge = mcpwm_capture_signal_get_edge(MCPWM_UNIT_0, MCPWM_SELECT_CAP0);
+        ts0 &= (~1); // clear LSB for indicate positive or negative edge
+        ts0 |= (edge >> 1) & 1; // edge: 1 - positive edge, 2 - negative edge
+        if (xQueueSendFromISR(cap_queue, &ts0, &taskWoken) != pdTRUE) cap_queue_err++;
     }
 
     MCPWM[MCPWM_UNIT_0]->int_clr.val = mcpwm_intr_status;
 
     if (taskWoken) {
-	portYIELD_FROM_ISR();
+        portYIELD_FROM_ISR();
     }
 }
 
@@ -132,7 +132,7 @@ void mcpwm_initialize(xQueueHandle queue)
  
     TaskHandle_t task;
     if (xTaskCreatePinnedToCore(isr_register_task, "isr_register_task", 2048, NULL, tskIDLE_PRIORITY, &task, 1) != pdPASS) {
-	ESP_LOGE(TAG, "xTaskCreatePinnedToCore() fail");
-	abort();
+        ESP_LOGE(TAG, "xTaskCreatePinnedToCore() fail");
+        abort();
     }
 }

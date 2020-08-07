@@ -98,49 +98,50 @@ void input_packet(uint8_t buf[], int size)
     int tnc_mode;
     
     switch (cmd) {
-	case CMD_DATA:
-	    // delete first byte, the byte is KISS port number
-	    // param: buf, size, wait for Queuing, ax25 flag, FX25 parity
-	    if (size > 1) {
-    		tnc_mode = get_tnc_mode();
-		switch (ch) {
-		    case 0: // AX.25 or FX.25 depend on the setting
-	        	fx25_send_packet(&buf[1], size - 1, 0, tnc_mode);
-			break;
-		    case 1: // AX.25
-	        	fx25_send_packet(&buf[1], size - 1, 0, AX25_MODE);
-			break;
-		    case 2: // FX.25 parity 16 symbols
-	        	fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_16);
-			break;
-		    case 3: // FX.25 parity 32 symbols
-	        	fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_32);
-			break;
-		    case 4: // FX.25 parity 64 symbols
-	        	fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_64);
-			break;
-		}
-	    }
-	    break;
+        case CMD_DATA:
+            // delete first byte, the byte is KISS port number
+            // param: buf, size, wait for Queuing, ax25 flag, FX25 parity
+            if (size > 1) {
+                tnc_mode = get_tnc_mode();
+                switch (ch) {
+                    case 0: // AX.25 or FX.25 depend on the setting
+                        fx25_send_packet(&buf[1], size - 1, 0, tnc_mode);
+                        break;
+                    case 1: // AX.25
+                        fx25_send_packet(&buf[1], size - 1, 0, AX25_MODE);
+                        break;
+                    case 2: // FX.25 parity 16 symbols
+                        fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_16);
+                        break;
+                    case 3: // FX.25 parity 32 symbols
+                        fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_32);
+                        break;
+                    case 4: // FX.25 parity 64 symbols
+                        fx25_send_packet(&buf[1], size - 1, 0, FX25_PARITY_64);
+                        break;
+                }
+            }
+            break;
 
-	case CMD_TXDELAY:
-	    set_txdelay(ch, param);
-	    break;
+        case CMD_TXDELAY:
+            set_txdelay(ch, param);
+            break;
 
-	case CMD_P:
-	    set_parameter_p(ch, param);
-	    break;
+        case CMD_P:
+            set_parameter_p(ch, param);
+            break;
 
-	case CMD_SLOTTIME:
-	    set_slottime(ch, param);
-	    break;
+        case CMD_SLOTTIME:
+            set_slottime(ch, param);
+            break;
 
-	case CMD_FULLDUPLEX:
-	    set_fullduplex(ch, param);
-	    break;
+        case CMD_FULLDUPLEX:
+            set_fullduplex(ch, param);
+            break;
 
-	case CMD_SETHARDWARE:
-	    set_sethardware(ch, &buf[1], size - 1);
+        case CMD_SETHARDWARE:
+            set_sethardware(ch, &buf[1], size - 1);
+            break;
     }
 }
 
@@ -170,76 +171,79 @@ void uart_af_read(int num, int size)
     ESP_LOGI(TAG, "uart_af_read: state = %d", state);
 
     if (size <= 0) {	// reset internal state
-	state = AF_IDLE;
-	ai = 0;
+        state = AF_IDLE;
+        ai = 0;
 
-	return;
+        return;
     }
 
     while (size > 0) {
-	if (len > UART_BUF_SIZE) len = UART_BUF_SIZE;
+        if (len > UART_BUF_SIZE) len = UART_BUF_SIZE;
 
         len = uart_read_bytes(num, uart_buf, len, 0);
-	ESP_LOGI(TAG, "uart_read_bytes: len = %d", len);
+        ESP_LOGI(TAG, "uart_read_bytes: len = %d", len);
 
-	if (len <= 0) {		// some error occured
-	    uart_flush_input(num);
-	    return;
-	}
+        if (len <= 0) {		// some error occured
+            uart_flush_input(num);
+            return;
+        }
 
         for (i = 0; i < len; i++) {
-	    c = uart_buf[i];
-	    d = -1;
-	    //ESP_LOGI(TAG, "uart_buf[%d] = %02x", i, c);
+            c = uart_buf[i];
+            d = -1;
+            //ESP_LOGI(TAG, "uart_buf[%d] = %02x", i, c);
 
-	    switch (state) {
-		case AF_IDLE:	// between async frame
-		    if (c == FEND) { // start of async frame
-		        state = AF_FEND;
-			ai = 0;
-			ESP_LOGI(TAG, "FEND");
-		    }
-		    break;
+            switch (state) {
+                case AF_IDLE:	// between async frame
+                    if (c == FEND) { // start of async frame
+                        state = AF_FEND;
+                        ai = 0;
+                        ESP_LOGI(TAG, "FEND");
+                    }
+                    break;
 
-	        case AF_FEND:	// process async frame data
-		    switch (c) {
-		        case FEND:	// end of async frame
-			    ESP_LOGI(TAG, "FEND: ai = %d", ai);
-		            if (ai > 0) {
-				input_packet(af_buf, ai); // process input packet
-				ESP_LOGI(TAG, "input_packet: ai = %d", ai);
-				state = AF_IDLE;
-			    }
-			    break;
-			case FESC:	// enter escaped mode
-			    state = AF_FESC;
-			    break;
-			default:	// normal data
-			    d = c;
-		    }
-		    break;
+                case AF_FEND:	// process async frame data
+                    switch (c) {
+                        case FEND:	// end of async frame
+                            ESP_LOGI(TAG, "FEND: ai = %d", ai);
+                            if (ai > 0) {
+                                input_packet(af_buf, ai); // process input packet
+                                ESP_LOGI(TAG, "input_packet: ai = %d", ai);
+                                state = AF_IDLE;
+                            }
+                            break;
+                        case FESC:	// enter escaped mode
+                            state = AF_FESC;
+                            break;
+                        default:	// normal data
+                            d = c;
+                            break;
+                    }
+		            break;
 
-	        case AF_FESC:	// escaped mode
-		    switch (c) {
-		        case TFEND:
-			    d = FEND;	// escaped data
-			    break;
-			case TFESC:
-			    d = FESC;	// escaped data
-		    }
-		    state = AF_FEND; // exit escaped mode
+                case AF_FESC:	// escaped mode
+                    switch (c) {
+                        case TFEND:
+                            d = FEND;	// escaped data
+                            break;
+                        case TFESC:
+                            d = FESC;	// escaped data
+                            break;
+                    }
+                    state = AF_FEND; // exit escaped mode
+                    break;
+	        }
+
+            if (d >= 0) { // add data to buffer
+                if (ai < AF_BUF_SIZE) {
+                    af_buf[ai++] = d;
+                } else {
+                    state = AF_IDLE; // async frame too large, discard packet
+                }
+            }
+
 	    }
-
-	    if (d >= 0) { // add data to buffer
-		if (ai < AF_BUF_SIZE) {
-		    af_buf[ai++] = d;
-		} else {
-		    state = AF_IDLE; // async frame too large, discard packet
-		}
-	    }
-
-	}
-	size -= len;
+        size -= len;
     }
 
     ESP_LOGI(TAG, "uart_af_read: return, state = %d, ai = %d", state, ai);
@@ -262,9 +266,9 @@ static void uart_event_task(void *pvParameters)
                 other types of events. If we take too much time on data event, the queue might
                 be full.*/
                 case UART_DATA:
-		    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
+                    ESP_LOGI(TAG, "[UART DATA]: %d", event.size);
                     uart_af_read(EX_UART_NUM, event.size);
-		    ESP_LOGI(TAG, "[UART EVT]:");
+                    ESP_LOGI(TAG, "[UART EVT]:");
                     break;
 
                 //Event of HW FIFO overflow detected
@@ -273,7 +277,7 @@ static void uart_event_task(void *pvParameters)
                     // If fifo overflow happened, you should consider adding flow control for your application.
                     // The ISR has already reset the rx FIFO,
                     // As an example, we directly flush the rx buffer here in order to read more data.
-		    uart_af_read(EX_UART_NUM, -1); // reset
+                    uart_af_read(EX_UART_NUM, -1); // reset
                     uart_flush_input(EX_UART_NUM);
                     xQueueReset(uart0_queue);
                     break;
@@ -283,7 +287,7 @@ static void uart_event_task(void *pvParameters)
                     ESP_LOGI(TAG, "ring buffer full");
                     // If buffer full happened, you should consider encreasing your buffer size
                     // As an example, we directly flush the rx buffer here in order to read more data.
-		    uart_af_read(EX_UART_NUM, -1); // reset
+                    uart_af_read(EX_UART_NUM, -1); // reset
                     uart_flush_input(EX_UART_NUM);
                     xQueueReset(uart0_queue);
                     break;
@@ -344,8 +348,8 @@ static int timer(int stop)
     static struct timeval tv0, tv1;
 
     if (!stop) {
-	gettimeofday(&tv0, NULL);
-	return 0;
+        gettimeofday(&tv0, NULL);
+        return 0;
     }
     
     gettimeofday(&tv1, NULL);
@@ -386,54 +390,54 @@ static void uart_send_split(uint8_t *item[], size_t size[])
 
     for (i = 0; i < 2; i++) {
 
-	buf = item[i];
-	if (buf == NULL) break;
-	len = size[i];
-	total += len;
-	bi = 0;
+        buf = item[i];
+        if (buf == NULL) break;
+        len = size[i];
+        total += len;
+        bi = 0;
 
         while (bi < len) {
        
-	    if (next_byte) {
-	        c = next_byte;
-	        next_byte = 0;
-	    } else {
-	        c = buf[bi];
-	    }
+            if (next_byte) {
+                c = next_byte;
+                next_byte = 0;
+            } else {
+                c = buf[bi];
+            }
 
 #ifdef CONFIG_TNC_DEMO_MODE
 
 #define LF '\n'
 #define CR '\r'
 
-	    if (c == LF) {
-		c = LF;
-		next_byte = CR;
-	    } else {
-		bi++;
+            if (c == LF) {
+            c = LF;
+            next_byte = CR;
+            } else {
+            bi++;
 	    }
 #else
-	    if (c == FEND) {
-	        c = FESC;
-	        next_byte = TFEND;
-	    } else if (c == FESC) {
-	        c = FESC;
-		next_byte = TFESC;
-	    } else {
-	        bi++;
-	    }
+            if (c == FEND) {
+                c = FESC;
+                next_byte = TFEND;
+            } else if (c == FESC) {
+                c = FESC;
+            next_byte = TFESC;
+            } else {
+                bi++;
+            }
 #endif
 
 #ifdef PRINT_ESC
-	    af_buf[ai++] = isprint(c) ? c : '.';
+            af_buf[ai++] = isprint(c) ? c : '.';
 #else
-	    af_buf[ai++] = c;
+            af_buf[ai++] = c;
 #endif
-	    if (ai >= AF_TX_BUF_SIZE) {
-	        uart_write_bytes(UART_NUM, af_buf, ai);
-	        ai = 0;
-	    }
-	}
+            if (ai >= AF_TX_BUF_SIZE) {
+                uart_write_bytes(UART_NUM, af_buf, ai);
+                ai = 0;
+            }
+        }
     }
 
 #ifndef CONFIG_TNC_DEMO_MODE
@@ -463,14 +467,14 @@ static void uart_send_task(void *p)
     size_t size[2];
 
     while (1) {
-	if (xRingbufferReceiveSplit(rb, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY) == pdTRUE) {
-	    
-	    if (item[0]) {
-		uart_send_split(item, size);
-		vRingbufferReturnItem(rb, item[0]);
-		if (item[1]) vRingbufferReturnItem(rb, item[1]);
-	    }
-	}
+        if (xRingbufferReceiveSplit(rb, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY) == pdTRUE) {
+            
+            if (item[0]) {
+                uart_send_split(item, size);
+                vRingbufferReturnItem(rb, item[0]);
+                if (item[1]) vRingbufferReturnItem(rb, item[1]);
+            }
+        }
     }
 }
 
@@ -481,10 +485,10 @@ static RingbufHandle_t tcp_ringbuf[RINGBUF_N];
 RingbufHandle_t *uart_add_ringbuf(RingbufHandle_t ringbuf)
 {
     for (int i = 0; i < RINGBUF_N; i++) {
-	if (tcp_ringbuf[i] == NULL) {
-	    tcp_ringbuf[i] = ringbuf;
-	    return &tcp_ringbuf[i];
-	}
+        if (tcp_ringbuf[i] == NULL) {
+            tcp_ringbuf[i] = ringbuf;
+            return &tcp_ringbuf[i];
+        }
     }
 
     return NULL;
@@ -493,9 +497,9 @@ RingbufHandle_t *uart_add_ringbuf(RingbufHandle_t ringbuf)
 void uart_delete_ringbuf(RingbufHandle_t ringbuf)
 {
     for (int i = 0; i < RINGBUF_N; i++) {
-	if (tcp_ringbuf[i] == ringbuf) {
-	    tcp_ringbuf[i] = NULL;
-	}
+        if (tcp_ringbuf[i] == ringbuf) {
+            tcp_ringbuf[i] = NULL;
+        }
     }
 }
 
@@ -504,12 +508,12 @@ void packet_output(uint8_t buf[], int size)
     if ((buf == NULL) || (size <= 0)) return;
 
     if (xRingbufferSend(uart0_ringbuf, buf, size, 0) != pdTRUE) {
-	ESP_LOGD(UART_TAG, "uart ring buffer full: %d bytes", size);
+        ESP_LOGD(UART_TAG, "uart ring buffer full: %d bytes", size);
     }
     for (int i = 0; i < RINGBUF_N; i++) {
-	if (tcp_ringbuf[i] && xRingbufferSend(tcp_ringbuf[i], buf, size, 0) != pdTRUE) { // 0: no wait
-	    ESP_LOGD(UART_TAG, "tcp ring buffer[%d] full: %d bytes", i, size);
-	}
+        if (tcp_ringbuf[i] && xRingbufferSend(tcp_ringbuf[i], buf, size, 0) != pdTRUE) { // 0: no wait
+            ESP_LOGD(UART_TAG, "tcp ring buffer[%d] full: %d bytes", i, size);
+        }
     }
 }
 
@@ -542,17 +546,17 @@ void uart_init(void)
 
     //Create a task to handler UART event from ISR
     if (xTaskCreatePinnedToCore(uart_event_task, "uart_event_task", 2048, NULL, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) != pdPASS) {
-	ESP_LOGE(TAG, "uart_event_task creation fail");
-	abort();
+        ESP_LOGE(TAG, "uart_event_task creation fail");
+        abort();
     }
 
     uart0_ringbuf = xRingbufferCreate(UART_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
     if (uart0_ringbuf == NULL) {
-	ESP_LOGD(TAG, "can not allocate ring buffer");
-	abort();
+        ESP_LOGD(TAG, "can not allocate ring buffer");
+        abort();
     }
     if (xTaskCreatePinnedToCore(uart_send_task, "uart_send_task", 2048, uart0_ringbuf, tskIDLE_PRIORITY+1, NULL, tskNO_AFFINITY) != pdPASS) {
-	ESP_LOGE(TAG, "uart_send_task creation fail");
-	abort();
+        ESP_LOGE(TAG, "uart_send_task creation fail");
+        abort();
     }
 }

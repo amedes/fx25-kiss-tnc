@@ -66,54 +66,53 @@ static esp_wps_config_t config = WPS_CONFIG_INIT_DEFAULT(WPS_TEST_MODE);
 static esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
-    case SYSTEM_EVENT_STA_START:
-        s_retry_num = 0;
-        esp_wifi_connect();
-        break;
-    case SYSTEM_EVENT_STA_GOT_IP:
-        ESP_LOGI(TAG, "got ip:%s",
-                 ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-	ESP_LOGI(TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
-        ESP_LOGI(TAG,"connect to the AP fail");
-	ESP_LOGI(TAG, "ssid: %s", event->event_info.disconnected.ssid);
-        {
-            if (s_retry_num < 10) {
-                ESP_ERROR_CHECK(esp_wifi_connect());
-                xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-                s_retry_num++;
-                ESP_LOGI(TAG,"retry to connect to the AP");
-            } else {
+		case SYSTEM_EVENT_STA_START:
+			s_retry_num = 0;
+			esp_wifi_connect();
+			break;
+		case SYSTEM_EVENT_STA_GOT_IP:
+			ESP_LOGI(TAG, "got ip:%s", ip4addr_ntoa(&event->event_info.got_ip.ip_info.ip));
+			s_retry_num = 0;
+			xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+			break;
+		case SYSTEM_EVENT_STA_DISCONNECTED:
+			ESP_LOGI(TAG, "SYSTEM_EVENT_STA_DISCONNECTED");
+			ESP_LOGI(TAG,"connect to the AP fail");
+			ESP_LOGI(TAG, "ssid: %s", event->event_info.disconnected.ssid);
+			{
+				if (s_retry_num < 10) {
+					ESP_ERROR_CHECK(esp_wifi_connect());
+					xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+					s_retry_num++;
+					ESP_LOGI(TAG,"retry to connect to the AP");
+				} else {
 #if 0
-		ESP_ERROR_CHECK(esp_wifi_wps_enable(&config));
-		ESP_ERROR_CHECK(esp_wifi_wps_start(0));
-		ESP_LOGI(TAG, "retry to wps...");
+					ESP_ERROR_CHECK(esp_wifi_wps_enable(&config));
+					ESP_ERROR_CHECK(esp_wifi_wps_start(0));
+					ESP_LOGI(TAG, "retry to wps...");
 #endif
-                s_retry_num = 0;
-	    }
-            break;
-        }
-    case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
-	ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_SUCCESS");
-	ESP_ERROR_CHECK(esp_wifi_wps_disable());
-        ESP_ERROR_CHECK(esp_wifi_connect());
-	break;
-    case SYSTEM_EVENT_STA_WPS_ER_FAILED:
-    case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
-	ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_FAILED/TIMEOUT");
-	ESP_ERROR_CHECK(esp_wifi_wps_disable());
-	ESP_ERROR_CHECK(esp_wifi_wps_enable(&config));
-	ESP_ERROR_CHECK(esp_wifi_wps_start(0));
-	break;
-    case SYSTEM_EVENT_STA_WPS_ER_PIN:
-	ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_PIN");
-	ESP_LOGI(TAG, "WPS_PIN = "PINSTR, PIN2STR(event->event_info.sta_er_pin.pin_code));
-	break;
-    default:
-        break;
+                	s_retry_num = 0;
+	    		}
+            	break;
+        	}
+		case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:
+			ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_SUCCESS");
+			ESP_ERROR_CHECK(esp_wifi_wps_disable());
+			ESP_ERROR_CHECK(esp_wifi_connect());
+			break;
+		case SYSTEM_EVENT_STA_WPS_ER_FAILED:
+		case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:
+			ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_FAILED/TIMEOUT");
+			ESP_ERROR_CHECK(esp_wifi_wps_disable());
+			ESP_ERROR_CHECK(esp_wifi_wps_enable(&config));
+			ESP_ERROR_CHECK(esp_wifi_wps_start(0));
+			break;
+		case SYSTEM_EVENT_STA_WPS_ER_PIN:
+			ESP_LOGI(TAG, "SYSTEM_EVENT_STA_WPS_ER_PIN");
+			ESP_LOGI(TAG, "WPS_PIN = "PINSTR, PIN2STR(event->event_info.sta_er_pin.pin_code));
+			break;
+		default:
+			break;
     }
     return ESP_OK;
 }
@@ -156,63 +155,66 @@ void tcp_client(struct netconn *conn)
 
     //netconn_set_recvtimeout(conn, RECVTIMEOUT);
     while ((xErr = netconn_recv(conn, &nbuf)) == ERR_OK) {
-	ESP_LOGD(TAG, "netconn_recv(): %d byte", netbuf_len(nbuf));
+		ESP_LOGD(TAG, "netconn_recv(): %d byte", netbuf_len(nbuf));
 
-	// do process KISS protocol (SLIP)
-	do {
-	    uint8_t *data;
-	    u16_t len;
-	    int i;
+		// do process KISS protocol (SLIP)
+		do {
+			uint8_t *data;
+			u16_t len;
+			int i;
 
-	    netbuf_data(nbuf, (void **)&data, &len);
-	    for (i = 0; i < len; i++) {
-		int c = data[i];
-		int d = -1;
+			netbuf_data(nbuf, (void **)&data, &len);
+			for (i = 0; i < len; i++) {
+				int c = data[i];
+				int d = -1;
 
-		switch (state) {
-		    case AF_IDLE:
-			if (c == FEND) {
-			    state = AF_FEND;
-			    ai = 0;
-			}
-			break;
-		    case AF_FEND:
-			switch (c) {
-			    case FEND: // end of packet
-				if (ai > 0) {
-				    input_packet(af_buf, ai); // transmit packet to the air
-				    state = AF_IDLE;
+				switch (state) {
+					case AF_IDLE:
+						if (c == FEND) {
+							state = AF_FEND;
+							ai = 0;
+						}
+						break;
+					case AF_FEND:
+						switch (c) {
+							case FEND: // end of packet
+								if (ai > 0) {
+									input_packet(af_buf, ai); // transmit packet to the air
+									state = AF_IDLE;
+								}
+								break;
+							case FESC: // escape
+								state = AF_FESC;
+								break;
+							default:
+								d = c; // normal char
+								break;
+						}
+						break;
+					case AF_FESC:
+						switch (c) {
+							case TFEND:
+								d = FEND;
+								break;
+							case TFESC:
+								d = FESC;
+								break;
+						}
+						state = AF_FEND;
+						break;
 				}
-				break;
-			    case FESC: // escape
-				state = AF_FESC;
-				break;
-			    default:
-				d = c; // normal char
-			}
-			break;
-		    case AF_FESC:
-			switch (c) {
-			    case TFEND:
-				d = FEND;
-				break;
-			    case TFESC:
-				d = FESC;
-			}
-			state = AF_FEND;
-		}
 
-		if (d >= 0) {
-		    if (ai < AF_BUF_SIZE) {
-			af_buf[ai++] = d;
-		    } else {
-			state = AF_IDLE; // buffer overflow
-		    }
-		}
-	    }
-	} while (netbuf_next(nbuf) >= 0);
-	netbuf_delete(nbuf);
-	ESP_LOGD(TAG, "netbuf_delete()");
+				if (d >= 0) {
+					if (ai < AF_BUF_SIZE) {
+						af_buf[ai++] = d;
+					} else {
+						state = AF_IDLE; // buffer overflow
+					}
+				}
+			}
+		} while (netbuf_next(nbuf) >= 0);
+		netbuf_delete(nbuf);
+		ESP_LOGD(TAG, "netbuf_delete()");
     }
     ESP_LOGD(TAG, "netconn_recv(): %d", xErr);
 }
@@ -240,51 +242,51 @@ static void tcp_send_split(struct netconn *conn, uint8_t *item[], size_t size[])
 
     for (i = 0; i < 2; i++) {
 
-	buf = item[i];
-	if (buf == NULL) break;
-	len = size[i];
-	total += len;
-	bi = 0;
+		buf = item[i];
+		if (buf == NULL) break;
+		len = size[i];
+		total += len;
+		bi = 0;
 
         while (bi < len) {
        
-	    if (next_byte) {
-	        c = next_byte;
-	        next_byte = 0;
-	    } else {
-	        c = buf[bi];
-	    }
+			if (next_byte) {
+				c = next_byte;
+				next_byte = 0;
+			} else {
+				c = buf[bi];
+			}
 
 #ifdef CONFIG_TNC_DEMO_MODE
 
 #define LF '\n'
 #define CR '\r'
 
-	    if (c == LF) {
-		c = LF;
-		next_byte = CR;
-	    } else {
-		bi++;
-	    }
+			if (c == LF) {
+				c = LF;
+				next_byte = CR;
+			} else {
+				bi++;
+			}
 #else
-	    if (c == FEND) {
-	        c = FESC;
-	        next_byte = TFEND;
-	    } else if (c == FESC) {
-	        c = FESC;
-		next_byte = TFESC;
-	    } else {
-	        bi++;
-	    }
+			if (c == FEND) {
+				c = FESC;
+				next_byte = TFEND;
+			} else if (c == FESC) {
+				c = FESC;
+				next_byte = TFESC;
+			} else {
+				bi++;
+			}
 #endif
 
-	    af_buf[ai++] = c;
+			af_buf[ai++] = c;
 
-	    if (ai >= AF_TX_BUF_SIZE) {
-	        netconn_write(conn, af_buf, ai, NETCONN_COPY);
-	        ai = 0;
-	    }
-	}
+			if (ai >= AF_TX_BUF_SIZE) {
+				netconn_write(conn, af_buf, ai, NETCONN_COPY);
+				ai = 0;
+			}
+		}
     }
 
 #ifndef CONFIG_TNC_DEMO_MODE
@@ -333,21 +335,21 @@ void tcp_reader_task(void *p)
     rc.conn = newconn;
     rc.ringbuf = xRingbufferCreate(TCP_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
     if (rc.ringbuf == NULL) {
-	ESP_LOGD(TAG, "xRingbufferCreate() tail\n");
+		ESP_LOGD(TAG, "xRingbufferCreate() tail\n");
     }
     if (rc.ringbuf != NULL) {
 
 	// register ringbuf
-	if (uart_add_ringbuf(rc.ringbuf)) {
-	    if (xTaskCreatePinnedToCore(tcp_writer_task, "tcp_write", 1024*4, &rc, tskIDLE_PRIORITY+1, &tcp_writer, tskNO_AFFINITY) == pdPASS) {
-		tcp_client(newconn);
-		ESP_LOGI(TAG, "tcp_client() returned");
-		vTaskDelete(tcp_writer); // stop writer task
-	    }
-	    // deregister ringbuf
-	    uart_delete_ringbuf(rc.ringbuf);
-	}
-	vRingbufferDelete(rc.ringbuf);
+		if (uart_add_ringbuf(rc.ringbuf)) {
+			if (xTaskCreatePinnedToCore(tcp_writer_task, "tcp_write", 1024*4, &rc, tskIDLE_PRIORITY+1, &tcp_writer, tskNO_AFFINITY) == pdPASS) {
+				tcp_client(newconn);
+				ESP_LOGI(TAG, "tcp_client() returned");
+				vTaskDelete(tcp_writer); // stop writer task
+			}
+			// deregister ringbuf
+			uart_delete_ringbuf(rc.ringbuf);
+		}
+		vRingbufferDelete(rc.ringbuf);
     }
 
     netconn_close(newconn);
@@ -366,50 +368,50 @@ static void wifi_task(void *p)
 
     while (1) {
 #ifndef CONFIG_ESP_WIFI_SOFTAP
-	xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
-	ESP_LOGI(TAG, "WiFi connected");
+		xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+		ESP_LOGI(TAG, "WiFi connected");
 #endif
 
-	conn = netconn_new_with_callback(NETCONN_TCP, callback);
-	if (conn == NULL) continue;
-	xErr = netconn_bind(conn, IP_ADDR_ANY, TNC_PORT);
-	if (xErr != ERR_OK) continue;
-	xErr = netconn_listen(conn);
-	if (xErr != ERR_OK) continue;
+		conn = netconn_new_with_callback(NETCONN_TCP, callback);
+		if (conn == NULL) continue;
+		xErr = netconn_bind(conn, IP_ADDR_ANY, TNC_PORT);
+		if (xErr != ERR_OK) continue;
+		xErr = netconn_listen(conn);
+		if (xErr != ERR_OK) continue;
 
-	while (1) {
-	    xErr = netconn_accept(conn, &newconn);
-	    ESP_LOGI(TAG, "netconn_accept(): %d", xErr);
-	    if (xErr != ERR_OK) continue;
+		while (1) {
+			xErr = netconn_accept(conn, &newconn);
+			ESP_LOGI(TAG, "netconn_accept(): %d", xErr);
+			if (xErr != ERR_OK) continue;
 
-	    // create tcp reader task
-	    if (xTaskCreatePinnedToCore(tcp_reader_task, "tcp_read", 1024*4, newconn, tskIDLE_PRIORITY+1, &tcp_reader, tskNO_AFFINITY) != pdTRUE) {
-		ESP_LOGD(TAG, "xTaskCreate(tcp_reader_task) fail\n");
-	    }
+			// create tcp reader task
+			if (xTaskCreatePinnedToCore(tcp_reader_task, "tcp_read", 1024*4, newconn, tskIDLE_PRIORITY+1, &tcp_reader, tskNO_AFFINITY) != pdTRUE) {
+				ESP_LOGD(TAG, "xTaskCreate(tcp_reader_task) fail\n");
+			}
 #if 0
-	    tcp_ringbuf = xRingbufferCreate(TCP_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
-	    if (tcp_ringbuf) {
-		// register ringbuf 
-		uart_add_ringbuf(tcp_ringbuf);
+			tcp_ringbuf = xRingbufferCreate(TCP_RINGBUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
+			if (tcp_ringbuf) {
+				// register ringbuf 
+				uart_add_ringbuf(tcp_ringbuf);
 
-	    	if (xTaskCreate(tcp_writer_task, "tcp_write", 1024*4, newconn, tskIDLE_PRIORITY, &tcp_writer) == pdPASS) {
+				if (xTaskCreate(tcp_writer_task, "tcp_write", 1024*4, newconn, tskIDLE_PRIORITY, &tcp_writer) == pdPASS) {
 
-	            tcp_client(newconn);
-		    ESP_LOGI(TAG, "tcp_client() returned");
+					tcp_client(newconn);
+					ESP_LOGI(TAG, "tcp_client() returned");
 
-		    vTaskDelete(tcp_writer); // stop writer task 
-	        }
-	        netconn_close(newconn);
-	        netconn_delete(newconn);
-	        ESP_LOGI(TAG, "netconn_delete()\n");
+					vTaskDelete(tcp_writer); // stop writer task 
+				}
+				netconn_close(newconn);
+				netconn_delete(newconn);
+				ESP_LOGI(TAG, "netconn_delete()\n");
 
-		// deregister ringbuf
-		uart_delete_ringbuf();
+				// deregister ringbuf
+				uart_delete_ringbuf();
 
-		vRingbufferDelete(tcp_ringbuf);
-	    }
+				vRingbufferDelete(tcp_ringbuf);
+			}
 #endif
-	}
+		}
     }
 }
 
@@ -435,44 +437,44 @@ static void http_task(void *p)
 
     conn = netconn_new(NETCONN_TCP);
     if (conn == NULL) {
-	ESP_LOGD(http_tag, "netconn_new() fail");
-	vTaskDelete(NULL); // terminate task
+		ESP_LOGD(http_tag, "netconn_new() fail");
+		vTaskDelete(NULL); // terminate task
     }
 
     xErr = netconn_bind(conn, IP_ADDR_ANY, HTTP_PORT);
     if (xErr != ERR_OK) {
-	ESP_LOGD(http_tag, "netconn_bind() fail");
-	vTaskDelete(NULL);
+		ESP_LOGD(http_tag, "netconn_bind() fail");
+		vTaskDelete(NULL);
     }
 
     xErr = netconn_listen(conn);
     if (xErr != ERR_OK) {
-	ESP_LOGD(http_tag, "netconn_listen() fail");
-	vTaskDelete(NULL);
+		ESP_LOGD(http_tag, "netconn_listen() fail");
+		vTaskDelete(NULL);
     }
 
     while (1) {
-	xErr = netconn_accept(conn, &newconn);
-	if (xErr != ERR_OK) continue;
+		xErr = netconn_accept(conn, &newconn);
+		if (xErr != ERR_OK) continue;
 
-	netconn_write(newconn, http_head, sizeof(http_head) - 1, NETCONN_NOCOPY);
+		netconn_write(newconn, http_head, sizeof(http_head) - 1, NETCONN_NOCOPY);
 
-	len = snprintf(http_buf, HTTP_BUFSIZ,
-			"Total: %d pkts<br>"
-			"FX25: %d pkts<br>"
-			"AX25: %d pkts<br>"
-			"FX25%%: %d %%<br>"
-			"AX25%%: %d %%<br>"
-			"Tag err: %d<br>"
-			"RS err: %d<br>"
-			"FCS err: %d<br>"
-			"</body></html>",
-			total_pkts, fx25_decode_pkts, ax25_decode_pkts,
-			fx25_decode_pkts*100/total_pkts, ax25_decode_pkts*100/total_pkts,
-			tag_error_pkts, rs_decode_err, fx25_fcs_err);
+		len = snprintf(http_buf, HTTP_BUFSIZ,
+				"Total: %d pkts<br>"
+				"FX25: %d pkts<br>"
+				"AX25: %d pkts<br>"
+				"FX25%%: %d %%<br>"
+				"AX25%%: %d %%<br>"
+				"Tag err: %d<br>"
+				"RS err: %d<br>"
+				"FCS err: %d<br>"
+				"</body></html>",
+				total_pkts, fx25_decode_pkts, ax25_decode_pkts,
+				fx25_decode_pkts*100/total_pkts, ax25_decode_pkts*100/total_pkts,
+				tag_error_pkts, rs_decode_err, fx25_fcs_err);
 
-	netconn_write(newconn, http_buf, len, NETCONN_COPY);
-	netconn_close(newconn);
+		netconn_write(newconn, http_buf, len, NETCONN_COPY);
+		netconn_close(newconn);
     }
 }
 
@@ -496,8 +498,7 @@ static void wifi_init_sta(void)
     };
 
     ESP_LOGI(TAG, "wifi_init_sta finished.");
-    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+    ESP_LOGI(TAG, "connect to ap SSID:%s password:%s", EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
 
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
     ESP_ERROR_CHECK(esp_wifi_start() );
@@ -517,8 +518,8 @@ void wifi_start(void)
     //Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
+		ESP_ERROR_CHECK(nvs_flash_erase());
+		ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
     
