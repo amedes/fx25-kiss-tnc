@@ -7,6 +7,7 @@ set(COMPONENT_SRCS
 "dac.c"
 "fx25_decode.c"
 "fx25_encode.c"
+"fx25_framesync.c"
 "fx25tag.c"
 "gf.c"
 "gf2p8.c"
