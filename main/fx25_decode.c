@@ -56,7 +56,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	static int code_tag_no;
 	static int rs_code_size = 0;
 	static int rs_info_size = 0;
-	static int flame_number = 1;
+	static int block_number = 1;
 	static int codeblock_bits;
 	int level;
 	static int bit_offset = 0;
@@ -91,9 +91,9 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 						// RS CODEBLOCK bit length
 						rs_code_size = tags[tag_no].rs_code;
 						rs_info_size = tags[tag_no].rs_info;
-						flame_number = tags[tag_no].flame_number;
+						block_number = tags[tag_no].block_number;
 
-						codeblock_bits = rs_code_size * flame_number * 8; 
+						codeblock_bits = rs_code_size * block_number * 8; 
 						bzero(buf, BUF_SIZE);
 						ESP_LOGI(TAG, "fx25 tag: bit_offset = %d", bit_offset);
 						bit_offset = 0;
@@ -102,8 +102,8 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 
 						state = STATE_DATA;
 					} else if (tag_no < CO_TAG_20) {
-						flame_number = tags[tag_no].flame_number;
-						ESP_LOGI(TAG, "found fx25 flame length tag: %02x, %d", tag_no, flame_number);
+						block_number = tags[tag_no].block_number;
+						ESP_LOGI(TAG, "found fx25 flame length tag: %02x, %d", tag_no, block_number);
 						state = STATE_MATCH_CODE_TAG;
 					} else {
 						ESP_LOGI(TAG, "tag code error: %02x", tag_no);
@@ -121,7 +121,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 					// correlation code_tag found
 					rs_code_size = code_tags[code_tag_no].rs_code;
 					rs_info_size = code_tags[code_tag_no].rs_info;
-					codeblock_bits = rs_code_size * flame_number * 8; 
+					codeblock_bits = rs_code_size * block_number * 8; 
 					bzero(buf, BUF_SIZE);
 					ESP_LOGI(TAG, "fx25 tag: bit_offset = %d", bit_offset);
 					bit_offset = 0;
@@ -242,7 +242,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 								// copy RS code block
 								buf[0] = AX25_FLAG; // fixed value, avoid error correction
 
-								int m =	flame_number;
+								int m =	block_number;
 								int rs_sum = 0;
 								for (int j = 0; j < m; j++) {
 									for (int i = 0; i < RS_CODE_SIZE; i++) {

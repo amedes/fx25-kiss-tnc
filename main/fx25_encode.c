@@ -35,6 +35,7 @@ Tag_0B 0x4A4ABEC4A724B796 RS(128, 64) - shortened RS(255, 191), 64 info bytes
 #define FX25_DATA_SIZE (4 + 8 + 255 + 1) // preamble + co_tag + RS_code + postamble
 #define RS_CODE_SIZE 255
 #define PARITY_SYMBOLS 16 // number of parity symbols, 16, 32, 64
+#define TAG_SIZE 8
 
 union CO_TAG {
     uint64_t val;
@@ -43,22 +44,86 @@ union CO_TAG {
     .val = 0xB74DB7DF8A532F3E
 };
 
+
+typedef struct {
+    uint8_t tags_byte[sizeof(uint64_t) * 2];
+    int tags_byte_length;
+    int block_number;
+    int block_info_length;
+    int block_code_length;
+} encode_info;
+
+
 #define AX25_FLAG 0x7e
 #define FX25_FLAG 0x7e
 #define FX25_PREAMBLE 4
 #define FX25_POSTAMBLE 1
 
+int choise_encode_info(encode_info *fx_code, int message_len, int parity_len)
+{
+    int i;
+    int j;
+    int k;
+
+    for (i = CO_TAG_0B; i >= CO_TAG_01; --i) {
+        if ((message_len <= tags[i].rs_info) && (parity_len == tags[i].rs_code - tags[i].rs_info)) {
+            fx_code->block_number = 1;
+            fx_code->block_code_length = tags[i].rs_code;
+            fx_code->block_info_length = tags[i].rs_info;
+            for (k = 0; k < TAG_SIZE; k++) {
+                fx_code->tags_byte[k] = tags[i].byte[k];
+            } 
+            fx_code->tags_byte_length = TAG_SIZE;
+            return 0;
+        }
+    }
+    for (i = CO_TAG_0C; i <= CO_TAG_0F; i++) {
+        if ((message_len <= tags[i].rs_info * tags[i].block_number) && (parity_len == tags[i].rs_code - tags[i].rs_info)) {
+            fx_code->block_number = tags[i].block_number;
+            fx_code->block_code_length = tags[i].rs_code;
+            fx_code->block_info_length = tags[i].rs_info;
+            for (k = 0; k < TAG_SIZE; k++) {
+                fx_code->tags_byte[k] = tags[i].byte[k];
+            } 
+            fx_code->tags_byte_length = TAG_SIZE;
+            return 0;
+        }
+    }
+    for (i = CO_TAG_10; i <= CO_TAG_1F; i++) {
+        if (message_len <= (RS_CODE_SIZE - parity_len) * tags[i].block_number) {
+            fx_code->block_number = tags[i].block_number;
+
+            for (j = CODE_TAG_01; j <= CODE_TAG_03; j++) {
+                if (parity_len == code_tags[j].rs_code - code_tags[j].rs_info) {
+                    fx_code->block_code_length = code_tags[j].rs_code;
+                    fx_code->block_info_length = code_tags[j].rs_info;
+                    for (k = 0; k < TAG_SIZE; k++) {
+                        fx_code->tags_byte[k] = tags[i].byte[k];
+                    }
+                    for (k = 0; k < TAG_SIZE; k++) {
+                        fx_code->tags_byte[k+TAG_SIZE] = code_tags[j].byte[k];
+                    }
+                    fx_code->tags_byte_length = TAG_SIZE*2;
+                    return 0;
+                }
+            }
+            ESP_LOGI(TAG, "fx25_encode(): unmached parity : len=%d, parity=%d", message_len, parity_len);
+            return -1;
+        }
+    }
+    ESP_LOGI(TAG, "fx25_encode(): packet too large: len=%d, parity=%d", message_len, parity_len);
+    return -1;
+}
+
+
 int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int info_len, int parity)
 {
-    int rs_code_byte = 0;
-    int rs_info_byte = 0;
     int index;
-    int tag_no = 0;
-    int code_tag_no = 0;
     int i;
     uint8_t rs_buf[RS_CODE_SIZE];
     int offset;
-    int need_flame = 1;
+
+    encode_info fx_info;
 
 #if 0
     printf("fx25_encode(): buf[], info_len = %d\n", info_len);
@@ -70,57 +135,9 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
 
     //  fx25tag_init();
 
-    // find suitable CO TAG based on data length
-    for (i = CO_TAG_0B; i >= CO_TAG_01; --i) {
-        if ((info_len <= tags[i].rs_info) && (parity == tags[i].rs_code - tags[i].rs_info)) {
-            tag_no = i;
-            need_flame = 1;
-            rs_code_byte = tags[tag_no].rs_code;
-            rs_info_byte = tags[tag_no].rs_info;
-            break;
-        }
-    }
+    // find suitable encode info and TAG based on data length
 
-// #define RS_INFO_SIZE 239
-// parity = FX25_PARITY_16;
-
-    // JH1FBM extension type 1
-    if (tag_no == 0) {
-        for (i = CO_TAG_0C; i <= CO_TAG_0F; i++) {
-            if ((info_len <= tags[i].rs_info * tags[i].flame_number) 
-                && (parity == tags[i].rs_code - tags[i].rs_info)) {
-                tag_no = i;
-                need_flame = tags[i].flame_number;
-                rs_code_byte = tags[tag_no].rs_code;
-                rs_info_byte = tags[tag_no].rs_info;
-                break;
-            }
-        }
-    }
-
-    // JH1FBM extension type 2
-    if (tag_no == 0) {
-        need_flame = info_len / (RS_CODE_SIZE - parity);
-        if (need_flame > 1 && need_flame < 16) {
-            tag_no = need_flame + CO_TAG_10;
-            for (i = CODE_TAG_01; i <= CODE_TAG_03; i++) {
-                if (parity == code_tags[i].rs_code - code_tags[i].rs_info) {
-                    code_tag_no = i;
-                    rs_code_byte = code_tags[code_tag_no].rs_code;
-                    rs_info_byte = code_tags[code_tag_no].rs_info;
-                }
-            }
-            if (code_tag_no == 0) { // suitable CODE TAG not found
-                ESP_LOGI(TAG, "fx25_encode(): unmached parity : len=%d, parity=%d", info_len, parity);
-                return -1;
-            }
-        }
-    }
-  //printf("fx25_encode(): tag_no = %02x\n", tag_no);
-
-    if (tag_no == 0) { // suitable TAG not found
-
-        ESP_LOGI(TAG, "fx25_encode(): packet too large: len=%d, parity=%d", info_len, parity);
+    if (choise_encode_info(&fx_info, fx25_data_len, parity) < 0) {
         return -1;
     }
 
@@ -149,14 +166,14 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
     }
 
     // correlation tag
-    for (i = 0;i < sizeof(tag); i++) {
-        fx25_data[index++] = tags[tag_no].byte[i];
+    for (i = 0; i < fx_info.tags_byte_length ; i++) {
+        fx25_data[index++] = fx_info.tags_byte[i];
     }
 
-    if (tag_no <= CO_TAG_0B) { // FX.25 specification
+    if (fx_info.block_number == 1) { // FX.25 specification
 
         // calculate RS parity
-        offset = RS_CODE_SIZE - rs_code_byte;
+        offset = RS_CODE_SIZE - fx_info.block_code_length;
         bzero(rs_buf, offset);
         //bzero(rs_buf, RS_CODE_SIZE);
         //memset(&rs_buf[offset], AX25_FLAG, rs_info_byte);
@@ -167,7 +184,7 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
         }
 
         // padding with AX25_FLAG
-        memset(&rs_buf[offset + info_len], AX25_FLAG, rs_info_byte - info_len);
+        memset(&rs_buf[offset + info_len], AX25_FLAG, fx_info.block_info_length - info_len);
 
         // generate RS parity
         if (rs_encode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
@@ -184,27 +201,20 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
     #endif
 
         // copy RS code
-        for (i = 0; i < rs_code_byte; i++) {
+        for (i = 0; i < fx_info.block_code_length; i++) {
             fx25_data[index++] = rs_buf[offset + i];
         }
 
     } else {
         // JH1FBM extension
-        if (tag_no > CO_TAG_0F) {
-            // JH1FBM extension 2
-            for (i = 0;i < sizeof(tag); i++) {
-                fx25_data[index++] = code_tags[code_tag_no].byte[i];
-            }
-        }
-
-        int m = need_flame; // multiplier m = 2 ~
+        int m = fx_info.block_number; // multiplier m = 2 ~
         for (int j = 0; j < m; j++) {
 
             // calculate RS parity
             //memset(&rs_buf[0], AX25_FLAG, RS_CODE_SIZE);
 
             // copy data to RS work
-            for (i = 0; i < rs_info_byte; i++) {
+            for (i = 0; i < fx_info.block_info_length; i++) {
                 rs_buf[i] = (i * m + j < info_len) ? buf[i * m + j] : AX25_FLAG;
             }
 

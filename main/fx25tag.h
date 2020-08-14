@@ -39,7 +39,7 @@ typedef struct {
         uint8_t byte[sizeof(uint64_t)];
     };
     int pn_type;
-    int flame_number;
+    int block_number;
     int rs_code;
     int rs_info;
 } tag_t;
