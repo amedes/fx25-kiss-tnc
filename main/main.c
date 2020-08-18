@@ -58,8 +58,8 @@
 #define BIT_TIME ((80000000 + BAUD/2) / BAUD) // APB clock 80MHz, 1200bps
 #define BIT_TIME2 (BIT_TIME / 2)
 
-#define FX25_BUF_SIZE (4 + 8 + 255*5 + 1) // maximum FX.25 packet size, first byte is type indicator
-#define AX25_BUF_SIZE (239*5 - 2)
+#define FX25_BUF_SIZE (4 + 8 + 8 + 255*15 + 1) // maximum FX.25 packet size, first byte is type indicator
+#define AX25_BUF_SIZE (239*15 - 2)
 #define AX25_NRZI_SIZE (((AX25_BUF_SIZE * 8 * 6 + 4) / 5 + 7) / 8)
 
 #define RXD_QUEUE_LEN 1024
