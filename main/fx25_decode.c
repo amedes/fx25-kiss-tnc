@@ -16,6 +16,7 @@
 #include "rs.h"
 #include "config.h"
 #include "fx25_framesync.h"
+#include "fx25_code_info.h"
 #ifdef CONFIG_TNC_DEMO_MODE
 #include "freertos/freertos.h"
 #include "freertos/ringbuf.h"
@@ -308,6 +309,11 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	if (fcs_ok) return ax25_len;
 	if (get_packet) return -1; // discard data due to error
 
+	return 0;
+}
+
+int choise_decode_info(code_info *fx_code, int bit)
+{
 	return 0;
 }
 

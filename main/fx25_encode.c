@@ -10,6 +10,7 @@
 #include "rs.h"
 //#include "afio.h"
 #include "fx25tag.h"
+#include "fx25_code_info.h"
 #include "bit_stuffing.h"
 #include "rmt.h"
 #include "ax25.h"
@@ -45,21 +46,13 @@ union CO_TAG {
 };
 
 
-typedef struct {
-    uint8_t tags_byte[sizeof(uint64_t) * 2];
-    int tags_byte_length;
-    int block_number;
-    int block_info_length;
-    int block_code_length;
-} encode_info;
-
 
 #define AX25_FLAG 0x7e
 #define FX25_FLAG 0x7e
 #define FX25_PREAMBLE 4
 #define FX25_POSTAMBLE 1
 
-int choise_encode_info(encode_info *fx_code, int message_len, int parity_len)
+int choise_encode_info(code_info *fx_code, int message_len, int parity_len)
 {
     int i;
     int j;
@@ -123,7 +116,7 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
     uint8_t rs_buf[RS_CODE_SIZE];
     int offset;
 
-    encode_info fx_info;
+    code_info fx_info;
 
 #if 0
     printf("fx25_encode(): buf[], info_len = %d\n", info_len);
