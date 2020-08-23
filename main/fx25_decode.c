@@ -44,6 +44,75 @@
 int tag_error_pkts = 0;
 #endif
 
+void clear_code_info(code_info *fx_code)
+{
+	fx_code->tagss[0] = 0LLU;
+	fx_code->tagss[1] = 0LLU;
+	fx_code->block_code_length = 0;
+	fx_code->block_info_length = 0;
+	fx_code->block_number = 0;
+	fx_code->sync_state = STATE_SEARCH_TAG;
+	return;
+}
+
+int choise_decode_info(code_info *fx_code, int bit)
+{
+	int tag_no;
+	int code_tag_no;
+
+	if (bit < 0) {
+		clear_code_info(fx_code);
+		return -1;
+	}
+
+	switch (fx_code->sync_state) {
+		case STATE_SEARCH_TAG:
+			if ((tag_no = fx25_search_tag(&(fx_code->tagss[0]), bit)) > 0) { 
+				// correlation tag found
+				if (tag_no < CO_TAG_10) {
+					// RS CODEBLOCK bit length
+					fx_code->block_code_length = tags[tag_no].rs_code;
+					fx_code->block_info_length = tags[tag_no].rs_info;
+					fx_code->block_number = tags[tag_no].block_number;
+					ESP_LOGI(TAG, "found fx25 tag: %02x, (%d, %d)",
+							tag_no, fx_code->block_code_length, fx_code->block_info_length);
+
+					fx_code->sync_state = STATE_DATA;
+				} else if (tag_no < CO_TAG_20) {
+					fx_code->block_number = tags[tag_no].block_number;
+					ESP_LOGI(TAG, "found fx25 1st tag: %02x, %d", tag_no, fx_code->block_number);
+					fx_code->sync_state = STATE_MATCH_CODE_TAG;
+				} else {
+					ESP_LOGI(TAG, "tag code error: %02x", tag_no);
+					return -1;
+				}
+			}
+			break;
+
+		case STATE_MATCH_CODE_TAG:
+			code_tag_no = fx25_match_2nd_tag(&(fx_code->tagss[1]), bit);
+			if (code_tag_no <= -2) {
+				// never match code tag
+				ESP_LOGI(TAG, "2nd tag code never matched: %016llx", (fx_code->tagss[1]));
+				clear_code_info(fx_code);
+				fx_code->sync_state = STATE_SEARCH_TAG;
+				return -1;
+			} else if (code_tag_no > 0) { 
+				// correlation code_tag found
+				fx_code->block_code_length = code_tags[code_tag_no].rs_code;
+				fx_code->block_info_length = code_tags[code_tag_no].rs_info;
+
+				ESP_LOGI(TAG, "found fx25 2nd tag: %02x, (%d, %d) x %d",
+						code_tag_no, fx_code->block_code_length, fx_code->block_info_length,
+						 fx_code->block_number );
+				fx_code->sync_state = STATE_DATA;
+			}
+
+		break;
+	}
+	return 0;
+}
+
 /*
  * fx25_decode()
  * bits: length of NRZIed mark or spece time
@@ -312,108 +381,65 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	return 0;
 }
 
-int choise_decode_info(code_info *fx_code, int bit)
-{
-	return 0;
-}
+
+//#define FX25_FLAGS 0x7e7e
+#define FX25_FLAGS 0x7e
 
 /*
  * fx25_decode_bit: input "bit" means one bit (0 or 1) of data
  *
  * return: tag_no of FX.25 packet, if read all packet data
  */
-int fx25_decode_bit(int level, uint8_t fx25_buf[], int fx25_buf_size)
+int fx25_decode_bit(int level, buffer_info *fxbuff_info, code_info *fx_info)
 {
 	static int level_prev = 1;
-	static int state = STATE_SEARCH_TAG;
-	static uint64_t fx25tag = 0;
-	static int tag_no;
-	static int codeblock_bits;
-	static int bit_offset;
-	static uint16_t fx25flag = 0;
+
 	int rs_code_size;
 	int bit;
 	int flag_found = 0;
 
-#if 0
-	// initialize tag value
-	if (!initialized) {
-	fx25tag_init();
-	initialized = 1;
-	}
-#endif
 
 	if (level < 0) { // reset variables
-		state = STATE_SEARCH_TAG;
-		fx25tag = 0;
 		//printf("fx25_decode_bit(): level_prev = %d, bit_offset = %d\n", level_prev, bit_offset);
 		level_prev = 1;
-		fx25flag = 0;
-
 		return 0;
 	}
 
 	bit = !(level ^ level_prev); // decode NRZI
 	level_prev = level;
 
-	switch (state) {
+	switch (fx_info->sync_state) {
 		case STATE_SEARCH_TAG:
-
-			//printf("fx25_decode_bit(): fx25tag = %016llx, bit = %d\n", fx25tag, bit);
-
-//#define FX25_FLAGS 0x7e7e
-#define FX25_FLAGS 0x7e
-	
-			// flag detection for bit sync
-			fx25flag >>= 1;
-			//if (bit) fx25flag |= 0x8000;
-			if (bit) fx25flag |= 0x80;
-			if (fx25flag == FX25_FLAGS) {
-				flag_found = 1;
-				fx25flag = 0;
-			}
-
-			if ((tag_no = fx25_search_tag(&fx25tag, bit)) > 0) { // correlation tag found
-
-				fx25tag = 0;
-				rs_code_size = tags[tag_no].rs_code;	// FX25 packet size
-
-				if (fx25_buf_size < rs_code_size) {	// buffer too small
-
+		case STATE_MATCH_CODE_TAG:
+			if (choise_decode_info(fx_info, bit) > 0) {
+				rs_code_size = fx_info->block_code_length * fx_info->block_number;
+				if (fxbuff_info->size < rs_code_size) {	
+					// buffer too small
 					printf("fx25_decode_bit(): rs_code_size = %d, fx25_buf_size = %d\n",
-						 rs_code_size, fx25_buf_size);
-
+						 rs_code_size, fxbuff_info->size);
 					return -1; // buffer too small
 				}
-
-				state = STATE_DATA;
-
-				bzero(fx25_buf, rs_code_size);	// clear buffer
-				codeblock_bits = rs_code_size * 8;	// RS CODEBLOCK bit length
-
-				//printf("fx25_decode_bit(): tag: bit_offset = %d\n", bit_offset);
-				bit_offset = 0;
-				//printf("fx25_decode_bit(): found fx25 tag: %02x, (%d, %d), %d\n", tag_no, tags[tag_no].rs_code, tags[tag_no].rs_info, codeblock_bits);
+				bzero(fxbuff_info->buff, rs_code_size);	// clear buffer
+				fxbuff_info->bit_pos = 0;
 			}
-
 			break;
 
+			// flag detection for bit sync
+
     	case STATE_DATA:
-
-			if (bit) fx25_buf[bit_offset / 8] |= 1 << (bit_offset % 8); // insert "1" to buffer
-			bit_offset++;
-
-			if (bit_offset >= codeblock_bits) {	// read all FX25 packet bits
-
-			//printf("fx25_decode_bit(): get packet: tag_no = %d, bit_offset = %d\n", tag_no, bit_offset);
+			if (bit) {
+				fxbuff_info->buff[fxbuff_info->bit_pos / 8] |= 1 << (fxbuff_info->bit_pos % 8); 
+				// insert "1" to buffer
+			}
+			fxbuff_info->bit_pos++;
+			rs_code_size = fx_info->block_code_length * fx_info->block_number;
+			if (fxbuff_info->bit_pos >= rs_code_size * 8) {	// read all FX25 packet bits
 
 				level_prev = 1;
-				state = STATE_SEARCH_TAG;
-				return tag_no;
+				fx_info->sync_state = STATE_SEARCH_TAG;
+				return 2;
 			}
     }
-
-    if (flag_found) return -2; // flag found
 
     return 0;
 }
