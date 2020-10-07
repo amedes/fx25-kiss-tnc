@@ -409,12 +409,12 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 	uint32_t rxd;
 	uint32_t rxd0;
 	uint32_t diff_time;
-	int level;
+	int edge_level;
 	int bit;
 
 	rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
 	if (rc != pdTRUE) {
-		return NO_SYNC;
+		return SYNC_ERROR;
 	}
 	if (cap_queue_err) {
 		printf("mcpwm: capture error: %d\n", cap_queue_err);
@@ -429,7 +429,7 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 	if (((rxd0 ^ rxd) & 1) == 0) {
 		// may be lost interrupt		
 		ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", diff_time>>3 / 10, diff_time>>3 % 10);
-		return NO_SYNC;
+		return SYNC_ERROR;
 	}
 
 	diff_time = rxd - rxd0;
@@ -441,19 +441,18 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 		rxst_info->bit_tm = 0;
 		rxst_info->bit_sum = 0;
 
-		return NO_SYNC;
+		return SYNC_ERROR;
     }
 
-    level = rxd & 1; // 0: positive edge, 1: negative edge
+    edge_level = rxd & 1; // 0: positive edge, 1: negative edge
 
     while (rxst_info->bit_tm + diff_time >= BIT_TIME) {
     //while (bit_tm + t >= bit_time[bit_time_cnt]) {
-		static uint8_t ax25_nrzi_buf[AX25_NRZI_SIZE];
 		uint32_t addt = BIT_TIME - rxst_info->bit_tm;
 		//uint32_t addt = bit_time[bit_time_cnt] - bit_tm;
 		//bit_time_cnt = (bit_time_cnt + 1) % 3;
 
-		if (level) {
+		if (edge_level) {
 			rxst_info->bit_sum += addt;
 		}
 		diff_time -= addt;
@@ -467,17 +466,11 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 		rxst_info->bit_sum = 0;
 		rxst_info->bit_tm = 0;
 
-		if (level < 0) { // reset variables
-			//printf("fx25_get_frame(): level_prev = %d, bit_offset = %d\n", level_prev, bit_offset);
-			rxst_info->level_prev = 1;
-			return NO_SYNC;
-		}
-
-		bit = !(level ^ rxst_info->level_prev); // decode NRZI
-		rxst_info->level_prev = level;
+		bit = !(edge_level ^ rxst_info->level_prev); // decode NRZI
+		rxst_info->level_prev = edge_level;
 
 	}
-	if (level) rxst_info->bit_sum += diff_time;
+	if (edge_level) rxst_info->bit_sum += diff_time;
     rxst_info->bit_tm += diff_time;
 
 	return bit;
