@@ -34,6 +34,7 @@
 #include "uart.h"
 #include "wifi.h"
 #include "tx_cntl.h"
+#include "fx25_code_info.h"
 
 #ifdef CONFIG_ESP_DAC
 #include "dac.h"
@@ -214,6 +215,9 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
     uint32_t t = rxd - rxd0;
     int level = rxd & 1; // 0: positive edge, 1: negative edge
     int pkt_ack = 0;
+	int level_prev = 0;
+	int bit;
+	int ax_pkt_error = 0;
     //static int bit_time_cnt = 0;
 
     if (t > BIT_LEN_MAX * BIT_TIME) {
@@ -249,19 +253,31 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
 		bit_sum = 0;
 		bit_tm = 0;
 
-		int tag_no = fx25_decode_bit(lv, fx25_buf, FX25_BUF_SIZE, fx_info); 
-
-		if (tag_no == -2) { // flag found
-
-			//printf("fx25_rx: bit sync, t = %u\n", t);
-
-			// bit sync
-			t = ((t + BIT_TIME2) / BIT_TIME) * BIT_TIME;
+		if (level < 0) { // reset variables
+			//printf("fx25_get_frame(): level_prev = %d, bit_offset = %d\n", level_prev, bit_offset);
+			level_prev = 1;
+			clear_code_info(fx_info);
+			return 0;
 		}
 
-		if (tag_no > 0) { // correlation tag is detected
+		bit = !(level ^ level_prev); // decode NRZI
+		level_prev = level;
+
+
+		int sync_stat = fx25_get_frame(bit, fx_buff, fx_info); 
+
+		
+		// PN_SYNC_DONE || FRAME_ERROR || FREME_CONTINUE || FRAME_ENDED
+		if (sync_stat == FRAME_ERROR) {
+
+		}
+		if (sync_stat == PN_SYNC_DONE) {
+			ax_pkt_error = 0;
+		}
+
+		if (sync_stat == FRAME_ENDED) {
 			static uint8_t ax25_buf[AX25_BUF_SIZE];
-			int rs_code_size = tags[tag_no].rs_code;
+			int rs_code_size = tags[sync_stat].rs_code;
 			int ax25_len = bitstuff_decode(ax25_buf, AX25_BUF_SIZE, &fx25_buf[1], rs_code_size - 1); // buf[0] is AX.25 flag (7E)
 
 
@@ -278,7 +294,7 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
 				static uint8_t err_buf[FX25_BUF_SIZE];
 				memcpy(err_buf, fx25_buf, rs_code_size);
 
-				int rs_result = fx25_rsdecode(fx25_buf, tag_no); // RS error correction
+				int rs_result = fx25_rsdecode(fx25_buf, sync_stat); // RS error correction
 
 
 				if (rs_result >= 0) {
@@ -308,7 +324,162 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
     return pkt_ack;
 }
 
-#include "fx25_code_info.h"
+int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
+{
+	int sync_stat = fx25_get_frame(bit, fx_buff, fx_info); 
+    int pkt_ack = 0;
+	// PN_SYNC_DONE || FRAME_ERROR || FREME_CONTINUE || FRAME_ENDED || UNDEFINED_PN || BUFF_NOT_ENOUGH
+	switch (sync_stat) {
+		case UNDEFINED_PN :
+			// Ignore for the time being.
+		break;
+		
+		case FRAME_ERROR :
+			// Ignore for the time being.
+		break;
+		
+		case BUFF_NOT_ENOUGH :
+			// このフレームはFX.25でのデコードをあきらめるしかない
+			// 
+		break;
+		
+		case PN_SYNC_DONE :
+			// ここからFX.25フレーム
+			// 並行してAX.25をデコードする場合もここから
+		break;
+		
+		case FRAME_CONTINUE :
+		break;
+		
+		case FRAME_ENDED :
+			int rs_code_size = tags[sync_stat].rs_code;
+			int hoge = ax25_decode_bit(bit, fx_buff, AX25_BUF_SIZE);
+			int ax25_len = bitstuff_decode(fx_buff, AX25_BUF_SIZE, fx_buff, rs_code_size - 1);
+
+
+			if ((ax25_len > 2) && ax25_fcs_check(fx_buff, ax25_len)) {
+
+//				pkt_ack++;
+				fx25_bits++;
+
+			} else {
+
+
+				fx25_rs_try++;
+
+				static uint8_t err_buf[FX25_BUF_SIZE];
+				memcpy(err_buf, fx_buff, rs_code_size);
+
+				int rs_result = fx25_rsdecode(fx_buff, sync_stat); // RS error correction
+
+
+				if (rs_result >= 0) {
+
+					ESP_LOGD(TAG, "fx25_rx: RS error correction: %d symbols", rs_result);
+					//print_diff(err_buf, fx25_buf, rs_code_size);
+					
+					ax25_len = bitstuff_decode(fx_buff, AX25_BUF_SIZE, &fx_buff[1], rs_code_size - 1);
+
+					if ((ax25_len > 2) && ax25_fcs_check(fx_buff, ax25_len)) {
+
+						fx25_bits++;
+						fx25_rs_ok++;
+						pkt_ack++;
+
+
+						ESP_LOGD(TAG, "fx25_rx: FCS error");
+					}
+
+				}
+			}
+		break;
+		
+	}
+	
+
+}
+
+#define NO_SYNC -1
+
+int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
+{
+	int rc;
+	uint32_t rxd;
+	uint32_t rxd0;
+	uint32_t diff_time;
+	int level;
+	int bit;
+
+	rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
+	if (rc != pdTRUE) {
+		return NO_SYNC;
+	}
+	if (cap_queue_err) {
+		printf("mcpwm: capture error: %d\n", cap_queue_err);
+		cap_queue_err = 0;
+		return NO_SYNC;
+	}
+
+	rxd0 = rxst_info->rxd0;
+	rxst_info->rxd0 = rxd;
+
+	// check RXD edge polarity
+	if (((rxd0 ^ rxd) & 1) == 0) {
+		// may be lost interrupt		
+		ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", diff_time>>3 / 10, diff_time>>3 % 10);
+		return NO_SYNC;
+	}
+
+	diff_time = rxd - rxd0;
+    //static int bit_time_cnt = 0;
+
+    if (diff_time > BIT_LEN_MAX * BIT_TIME) {
+
+		// bit sync and reset
+		rxst_info->bit_tm = 0;
+		rxst_info->bit_sum = 0;
+
+		return NO_SYNC;
+    }
+
+    level = rxd & 1; // 0: positive edge, 1: negative edge
+
+    while (rxst_info->bit_tm + diff_time >= BIT_TIME) {
+    //while (bit_tm + t >= bit_time[bit_time_cnt]) {
+		static uint8_t ax25_nrzi_buf[AX25_NRZI_SIZE];
+		uint32_t addt = BIT_TIME - rxst_info->bit_tm;
+		//uint32_t addt = bit_time[bit_time_cnt] - bit_tm;
+		//bit_time_cnt = (bit_time_cnt + 1) % 3;
+
+		if (level) {
+			rxst_info->bit_sum += addt;
+		}
+		diff_time -= addt;
+
+		int lv = rxst_info->bit_sum >= BIT_TIME2;
+
+		// statistics
+		ax25_bit_sum[lv] += rxst_info->bit_sum;
+		ax25_bit_cnt[lv]++;
+
+		rxst_info->bit_sum = 0;
+		rxst_info->bit_tm = 0;
+
+		if (level < 0) { // reset variables
+			//printf("fx25_get_frame(): level_prev = %d, bit_offset = %d\n", level_prev, bit_offset);
+			rxst_info->level_prev = 1;
+			return NO_SYNC;
+		}
+
+		bit = !(level ^ rxst_info->level_prev); // decode NRZI
+		rxst_info->level_prev = level;
+
+	}
+	if (level) rxst_info->bit_sum += diff_time;
+    rxst_info->bit_tm += diff_time;
+
+	return bit;
+}
 
 /*
  * TNC receive task
@@ -316,52 +487,34 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
 void rx_task(void *p)
 {
     QueueHandle_t capqueue = *(QueueHandle_t *)p;
-    uint32_t rxd0 = 0, /*rxd1 = 0,*/ rxd;    
-    int rc;
-    //static uint8_t ax25_buf[AX25_BUF_SIZE];
-    //static uint8_t ax25_nrzi_buf[AX25_NRZI_SIZE];
-    //static uint8_t ax25_buf2[AX25_BUF_SIZE];
-    //static uint8_t fx25_buf[FX25_BUF_SIZE];
-    //int ax25_cnt = 0;
-    //int ec_cnt = 0;
-    //int len;
-    //int nrzi_cnt = 0;
-    //int st = 0;
-    //int bit_sum = 0;
-    //int bit_tm = 0;
-    int pkt_ack = 0;
 
 	code_info fx25_info;
 	buffer_info buff_info;
+	bitsync_info rxst_info;
 
-    while (1) {
-		rxd0 = rxd;
-		rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
-		if (rc != pdTRUE) continue;
+ 	rxst_info.bit_sum = 0;
+	rxst_info.bit_tm = 0;
+ 	rxst_info.rxd0 = 0;
+	rxst_info.level_prev = 1;
 
-		if (cap_queue_err) {
-			printf("mcpwm: capture error: %d\n", cap_queue_err);
-			cap_queue_err = 0;
-		}
+	int bit;
 
-		// check RXD edge polarity
-		if (((rxd0 ^ rxd) & 1) == 0) {
-			// may be lost interrupt
-			uint32_t tmp = (rxd - rxd0) >> 3;
-			ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", tmp / 10, tmp % 10);
-		}
-
+    for (;;) {
 
 		// AX.25 packet decode
-		pkt_ack = ax25_rx(rxd, rxd0);
+//		pkt_ack = ax25_rx(rxd, rxd0);
 
 		//uint32_t t = rxd - rxd0;
 		//int level = rxd & 1; // positive edge 0, negative edge 1
 		//int bits = (t + BIT_TIME2) / BIT_TIME; // number of bit length between edges
 
-		// decode FX.25 packet
-		pkt_ack += fx25_rx(rxd, rxd0, &buff_info, &fx25_info);
-
+		bit = rx_bit_sync(capqueue, &rxst_info);
+		if (bit == NO_SYNC) {
+			clear_code_info(&fx25_info);
+			continue;
+		}
+		
+		rx_bit_receive(bit, &buff_info, &fx25_info);
     }
 }
 
