@@ -457,17 +457,17 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 		}
 		diff_time -= addt;
 
-		int lv = rxst_info->bit_sum >= BIT_TIME2;
+		int bit_level = rxst_info->bit_sum >= BIT_TIME2;
 
 		// statistics
-		ax25_bit_sum[lv] += rxst_info->bit_sum;
-		ax25_bit_cnt[lv]++;
+		ax25_bit_sum[bit_level] += rxst_info->bit_sum;
+		ax25_bit_cnt[bit_level]++;
 
 		rxst_info->bit_sum = 0;
 		rxst_info->bit_tm = 0;
 
-		bit = !(edge_level ^ rxst_info->level_prev); // decode NRZI
-		rxst_info->level_prev = edge_level;
+		bit = !(bit_level ^ rxst_info->bit_level_prev); // decode NRZI
+		rxst_info->bit_level_prev = bit_level;
 
 	}
 	if (edge_level) rxst_info->bit_sum += diff_time;
@@ -490,7 +490,7 @@ void rx_task(void *p)
  	rxst_info.bit_sum = 0;
 	rxst_info.bit_tm = 0;
  	rxst_info.rxd0 = 0;
-	rxst_info.level_prev = 1;
+	rxst_info.bit_level_prev = 1;
 
 	int bit;
 

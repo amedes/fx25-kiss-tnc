@@ -28,8 +28,8 @@ typedef struct {
 	uint32_t rxd;
     int bit_tm;
     int bit_sum;
-    int level_prev;
-    int bit;
+    int edge_level_prev;
+    int bit_level_prev;
 } bitsync_info;
 
 #define FRAME_CONTINUE 0
