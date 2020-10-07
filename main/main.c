@@ -391,6 +391,7 @@ int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 					}
 
 				}
+				packet_output(fx_buff->buff, ax25_len - 2);
 			}
 		break;
 		
@@ -400,6 +401,7 @@ int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 }
 
 #define NO_SYNC -1
+#define SYNC_ERROR -2
 
 int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 {
@@ -417,7 +419,7 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 	if (cap_queue_err) {
 		printf("mcpwm: capture error: %d\n", cap_queue_err);
 		cap_queue_err = 0;
-		return NO_SYNC;
+		return SYNC_ERROR;
 	}
 
 	rxd0 = rxst_info->rxd0;
@@ -500,9 +502,6 @@ void rx_task(void *p)
 	int bit;
 
     for (;;) {
-
-		// AX.25 packet decode
-//		pkt_ack = ax25_rx(rxd, rxd0);
 
 		//uint32_t t = rxd - rxd0;
 		//int level = rxd & 1; // positive edge 0, negative edge 1
