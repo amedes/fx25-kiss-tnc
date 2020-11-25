@@ -313,7 +313,7 @@ int fx25_decode(int bits, uint8_t ax25_buf[], int ax25_buf_size, int *rs_status)
 	return 0;
 }
 
-void clear_code_info(code_info *fx_code)
+void init_code_info(code_info *fx_code)
 {
 	fx_code->tagss[0] = 0LLU;
 	fx_code->tagss[1] = 0LLU;

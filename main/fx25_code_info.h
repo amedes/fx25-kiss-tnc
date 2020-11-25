@@ -30,6 +30,7 @@ typedef struct {
     int bit_sum;
     int edge_level_prev;
     int bit_level_prev;
+    int onbit;
 } bitsync_info;
 
 #define FRAME_CONTINUE 0
@@ -39,7 +40,8 @@ typedef struct {
 #define UNDEFINED_PN -2
 #define BUFF_NOT_ENOUGH -3
 
-void clear_code_info(code_info *fx_code);
+
+void init_code_info(code_info *fx_code);
 int choise_decode_info(code_info *fx_code, int bit);
 
 #define FX25_CODE_INFO_H

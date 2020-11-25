@@ -60,7 +60,7 @@
 #define BIT_TIME2 (BIT_TIME / 2)
 
 #define FX25_BUF_SIZE (4 + 8 + 8 + 255*15 + 1) // maximum FX.25 packet size, first byte is type indicator
-#define AX25_BUF_SIZE (239*15 - 2)
+#define AX25_BUF_SIZE (4096)
 #define AX25_NRZI_SIZE (((AX25_BUF_SIZE * 8 * 6 + 4) / 5 + 7) / 8)
 
 #define RXD_QUEUE_LEN 1024
@@ -323,11 +323,11 @@ static int fx25_rx(uint32_t rxd, uint32_t rxd0, buffer_info *fx_buff, code_info 
 
     return pkt_ack;
 }
-
+#define FX25 1
 int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 {
+	int mode;
 	int sync_stat = fx25_get_frame(bit, fx_buff, fx_info); 
-    int pkt_ack = 0;
 	// PN_SYNC_DONE || FRAME_ERROR || FREME_CONTINUE || FRAME_ENDED || UNDEFINED_PN || BUFF_NOT_ENOUGH
 	switch (sync_stat) {
 		case UNDEFINED_PN :
@@ -345,7 +345,9 @@ int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 		
 		case PN_SYNC_DONE :
 			// ここからFX.25フレーム
-			// 並行してAX.25をデコードする場合もここから
+			// 並行してAX.25をデコードする場合も改めてここからなので
+			// AX.25のデコードをリセット
+			mode = FX25;
 		break;
 		
 		case FRAME_CONTINUE :
@@ -384,7 +386,7 @@ int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 
 						fx25_bits++;
 						fx25_rs_ok++;
-						pkt_ack++;
+
 
 
 						ESP_LOGD(TAG, "fx25_rx: FCS error");
@@ -400,8 +402,25 @@ int rx_bit_receive(int bit, buffer_info *fx_buff, code_info *fx_info)
 
 }
 
+void init_buffer_info(buffer_info *buff_info)
+{
+	buff_info->bit_pos = 0;
+	buff_info->buff_size = AX25_BUF_SIZE;
+}
+
 #define NO_SYNC -1
 #define SYNC_ERROR -2
+
+void init_bitsync_info(bitsync_info *sync_info)
+{
+ 	sync_info->bit_sum = 0;
+	sync_info->bit_tm = 0;
+ 	sync_info->rxd0 = 0;
+	sync_info->bit_level_prev = 1;
+	sync_info->onbit = 0;
+
+	return;
+}
 
 int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 {
@@ -409,71 +428,63 @@ int rx_bit_sync(QueueHandle_t capqueue, bitsync_info *rxst_info)
 	uint32_t rxd;
 	uint32_t rxd0;
 	uint32_t diff_time;
-	int edge_level;
-	int bit;
+	int edge_polarity;
 
-	rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
-	if (rc != pdTRUE) {
-		return SYNC_ERROR;
+	if (rxst_info->onbit == 0) {
+		rc = xQueueReceive(capqueue, &rxd, 1000); // wait 1000 ticks
+		if (rc != pdTRUE) {
+			return SYNC_ERROR;
+		}
+		if (cap_queue_err) {
+			printf("mcpwm: capture error: %d\n", cap_queue_err);
+			cap_queue_err = 0;
+			return SYNC_ERROR;
+		}
+
+		rxd0 = rxst_info->rxd0;
+
+		diff_time = rxd - rxd0;
+		//static int bit_time_cnt = 0;
+
+		// check RXD edge polarity
+		if (((rxd0 ^ rxd) & 1) == 0) {
+			// may be lost interrupt		
+			ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", diff_time>>3 / 10, diff_time>>3 % 10);
+			return SYNC_ERROR;
+		}
+		rxst_info->rxd0 = rxd;
+
+		if (diff_time > BIT_LEN_MAX * BIT_TIME) {
+			// too long 1 bit
+			ESP_LOGI(TAG, "wrong 1 bit length : time diff %u.%u us", diff_time>>3 / 10, diff_time>>3 % 10);
+			return SYNC_ERROR;
+		}
+
+		edge_polarity = rxd & 1; // 0: positive edge, 1: negative edge
 	}
-	if (cap_queue_err) {
-		printf("mcpwm: capture error: %d\n", cap_queue_err);
-		cap_queue_err = 0;
-		return SYNC_ERROR;
-	}
-
-	rxd0 = rxst_info->rxd0;
-	rxst_info->rxd0 = rxd;
-
-	// check RXD edge polarity
-	if (((rxd0 ^ rxd) & 1) == 0) {
-		// may be lost interrupt		
-		ESP_LOGI(TAG, "wrong RXD edge polarity: time diff %u.%u us", diff_time>>3 / 10, diff_time>>3 % 10);
-		return SYNC_ERROR;
-	}
-
-	diff_time = rxd - rxd0;
-    //static int bit_time_cnt = 0;
-
-    if (diff_time > BIT_LEN_MAX * BIT_TIME) {
-
-		// bit sync and reset
-		rxst_info->bit_tm = 0;
-		rxst_info->bit_sum = 0;
-
-		return SYNC_ERROR;
-    }
-
-    edge_level = rxd & 1; // 0: positive edge, 1: negative edge
-
-    while (rxst_info->bit_tm + diff_time >= BIT_TIME) {
-    //while (bit_tm + t >= bit_time[bit_time_cnt]) {
+	if (rxst_info->bit_tm + diff_time >= BIT_TIME) {
+		rxst_info->onbit = 1;
 		uint32_t addt = BIT_TIME - rxst_info->bit_tm;
-		//uint32_t addt = bit_time[bit_time_cnt] - bit_tm;
-		//bit_time_cnt = (bit_time_cnt + 1) % 3;
 
-		if (edge_level) {
+		if (edge_polarity) {
 			rxst_info->bit_sum += addt;
 		}
 		diff_time -= addt;
 
 		int bit_level = rxst_info->bit_sum >= BIT_TIME2;
 
-		// statistics
-		ax25_bit_sum[bit_level] += rxst_info->bit_sum;
-		ax25_bit_cnt[bit_level]++;
-
 		rxst_info->bit_sum = 0;
 		rxst_info->bit_tm = 0;
 
-		bit = !(bit_level ^ rxst_info->bit_level_prev); // decode NRZI
+		int bit = !(bit_level ^ rxst_info->bit_level_prev); // decode NRZI
 		rxst_info->bit_level_prev = bit_level;
-
+		return bit;
 	}
-	if (edge_level) rxst_info->bit_sum += diff_time;
+	rxst_info->onbit = 0;
+	if (edge_polarity) rxst_info->bit_sum += diff_time;
     rxst_info->bit_tm += diff_time;
 
-	return bit;
+	return NO_SYNC;
 }
 
 /*
@@ -484,15 +495,11 @@ void rx_task(void *p)
     QueueHandle_t capqueue = *(QueueHandle_t *)p;
 
 	code_info fx25_info;
-	buffer_info buff_info;
 	bitsync_info rxst_info;
+	buffer_info buff_info;
 
- 	rxst_info.bit_sum = 0;
-	rxst_info.bit_tm = 0;
- 	rxst_info.rxd0 = 0;
-	rxst_info.bit_level_prev = 1;
-
-	int bit;
+ 	init_bitsync_info(&rxst_info);
+	init_buffer_info(&buff_info);
 
     for (;;) {
 
@@ -500,9 +507,12 @@ void rx_task(void *p)
 		//int level = rxd & 1; // positive edge 0, negative edge 1
 		//int bits = (t + BIT_TIME2) / BIT_TIME; // number of bit length between edges
 
-		bit = rx_bit_sync(capqueue, &rxst_info);
+		int bit = rx_bit_sync(capqueue, &rxst_info);
+		if (bit == SYNC_ERROR) {
+			init_code_info(&fx25_info);
+			continue;
+		}
 		if (bit == NO_SYNC) {
-			clear_code_info(&fx25_info);
 			continue;
 		}
 		
