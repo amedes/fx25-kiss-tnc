@@ -56,7 +56,7 @@ static const char *TAG = "uart_events";
 
 #define AF_BUF_SIZE (1024+1)	// +1 is for "type"
 #define UART_BUF_SIZE 64
-#define FX25_BUF_SIZE (4 + 8 + 255*5 + 1)	// FX.25 buffer size
+#define FX25_BUF_SIZE (4 + 8 + 8 + 255*15 + 1)	// FX.25 buffer size
 #define AX25_BUF_SIZE (1024 + 2)		// data + FCS
 #define MAX_PKT_SIZE 1024
 
@@ -411,11 +411,11 @@ static void uart_send_split(uint8_t *item[], size_t size[])
 #define CR '\r'
 
             if (c == LF) {
-            c = LF;
-            next_byte = CR;
+                c = LF;
+                next_byte = CR;
             } else {
-            bi++;
-	    }
+               bi++;
+	        }
 #else
             if (c == FEND) {
                 c = FESC;

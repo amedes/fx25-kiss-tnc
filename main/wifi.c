@@ -315,14 +315,16 @@ void tcp_writer_task(void *p)
     size_t size[2];
 
     while (1) {
-        if (xRingbufferReceiveSplit(rcp->ringbuf, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY) == pdTRUE) { 
+        if (xRingbufferReceiveSplit(
+				rcp->ringbuf, (void **)&item[0], (void **)&item[1], &size[0], &size[1], portMAX_DELAY
+			) == pdTRUE) { 
 
-	    if (item[0]) {
-	        tcp_send_split(rcp->conn, item, size);
-	        vRingbufferReturnItem(rcp->ringbuf, item[0]);
-	        if (item[1]) vRingbufferReturnItem(rcp->ringbuf, item[1]);
-	    }
-	}
+			if (item[0]) {
+				tcp_send_split(rcp->conn, item, size);
+				vRingbufferReturnItem(rcp->ringbuf, item[0]);
+				if (item[1]) vRingbufferReturnItem(rcp->ringbuf, item[1]);
+			}
+		}
     }
 }
 
