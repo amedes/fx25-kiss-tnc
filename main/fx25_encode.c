@@ -157,17 +157,29 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
 
         // calculate RS parity
         offset = RS_CODE_SIZE - rs_code_byte;
+#ifdef CONFIG_RS_DIREWOLF_GP
+        bzero(&rs_buf[rs_info_byte], offset);
+#else
         bzero(rs_buf, offset);
+#endif
         //bzero(rs_buf, RS_CODE_SIZE);
         //memset(&rs_buf[offset], AX25_FLAG, rs_info_byte);
 
         // copy data to RS work
         for (i = 0; i < info_len; i++) {
+#ifdef CONFIG_RS_DIREWOLF_GP
+            rs_buf[i] = buf[i];
+#else
             rs_buf[offset + i] = buf[i];
+#endif
         }
 
         // padding with AX25_FLAG
+#ifdef CONFIG_RS_DIREWOLF_GP
+        memset(&rs_buf[info_len], AX25_FLAG, rs_info_byte - info_len);
+#else
         memset(&rs_buf[offset + info_len], AX25_FLAG, rs_info_byte - info_len);
+#endif
 
         // generate RS parity
         if (rs_encode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - parity) < 0) {
@@ -184,9 +196,20 @@ int fx25_encode(uint8_t fx25_data[], int fx25_data_len, const uint8_t buf[], int
     #endif
 
         // copy RS code
+#ifdef CONFIG_RS_DIREWOLF_GP
+	// copy message
+        for (i = 0; i < rs_info_byte; i++) {
+            fx25_data[index++] = rs_buf[i];
+        }
+	// copy parity
+        for (i = RS_CODE_SIZE - parity; i < RS_CODE_SIZE; i++) {
+            fx25_data[index++] = rs_buf[i];
+        }
+#else
         for (i = 0; i < rs_code_byte; i++) {
             fx25_data[index++] = rs_buf[offset + i];
         }
+#endif
 
     } else {
         // JH1FBM extension

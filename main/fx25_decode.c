@@ -633,10 +633,18 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 		//if (offset > 0) bzero(rs_buf, offset);	// for shortend code, zero clear
 		bzero(rs_buf, RS_CODE_SIZE);	// for shortend code, zero clear
 
+#ifdef CONFIG_RS_DIREWOLF_GP
+		rs_buf[0] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
+#else
 		rs_buf[offset] = AX25_FLAG;		// first byte is always AX.25 flag (7E)
+#endif
 
 		for (i = 1; i < rs_code_size; i++) {	// copy data to RS buffer
+#ifdef CONFIG_RS_DIREWOLF_GP
+			rs_buf[i] = fx25_buf[i];
+#else
 			rs_buf[offset + i] = fx25_buf[i];
+#endif
 		}
 
 		rs_result = rs_decode(rs_buf, RS_CODE_SIZE, RS_CODE_SIZE - rs_parity);
@@ -645,7 +653,11 @@ int fx25_rsdecode(uint8_t fx25_buf[], int tag_no)
 
 		//for (i = 0; i < rs_info_size; i++) {
 		for (i = 0; i < rs_code_size; i++) {
+#ifdef CONFIG_RS_DIREWOLF_GP
+			fx25_buf[i] = rs_buf[i];
+#else
 			fx25_buf[i] = rs_buf[offset + i];
+#endif
 		}
 #if 0
 		printf("fx25_rsdecode: rs_buf[]\n");
