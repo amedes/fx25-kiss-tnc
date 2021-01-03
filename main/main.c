@@ -419,7 +419,11 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		return 0;
     }
 
-    while (bit_tm + t >= BIT_TIME) {
+    // length of the edge duration convert to number of bits
+    int bits = (t + BIT_TIME2) / BIT_TIME;
+
+    while (bits-- > 0) {
+    //while (bit_tm + t >= BIT_TIME) {
     //while (bit_tm + t >= bit_time[bit_time_cnt]) {
 		static uint8_t ax25_nrzi_buf[AX25_NRZI_SIZE];
 		uint32_t addt = BIT_TIME - bit_tm;
@@ -438,7 +442,8 @@ static int ax25_rx(uint32_t rxd, uint32_t rxd0)
 		bit_sum = 0;
 		bit_tm = 0;
 
-		int nrzi_len = ax25_nrzi_bit(lv, ax25_nrzi_buf, AX25_NRZI_SIZE);
+		//int nrzi_len = ax25_nrzi_bit(lv, ax25_nrzi_buf, AX25_NRZI_SIZE);
+		int nrzi_len = ax25_nrzi_bit(level, ax25_nrzi_buf, AX25_NRZI_SIZE);
 
 		if (nrzi_len == -2) { // flag found
 
